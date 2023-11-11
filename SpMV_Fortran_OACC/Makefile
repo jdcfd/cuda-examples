@@ -5,7 +5,7 @@ INCLUDE:=$(NVHPC)/compilers/include
 FFLAGS:=-acc -gpu=cc86 -Minfo=accel -cudalib=cutensor #-I$(INCLUDE)
 
 # SRC_FILES := $(wildcard *.f90)
-SRC_FILES := prec_const.f90 matrix_utils.f90
+SRC_FILES := matrix_utils.f90
 
 # Create a list of object files (*.o) from source files
 OBJ_FILES := $(patsubst %.f90, %.o, $(SRC_FILES))
@@ -26,4 +26,4 @@ program: driver
 	$(FC) $(FFLAGS) -o spmv spmv_driver.o $(OBJ_FILES) mmio.o
 
 clean:
-	rm -f *.o spmv
+	rm -f *.o *.mod spmv
