@@ -11,10 +11,10 @@ module cusparse_routines
         integer, intent(in) :: nrows, ncols, nnz
         integer, dimension(nrows+1), intent(in):: csrOffsets 
         integer, dimension(nnz), intent(in) :: columns 
-        real, dimension(nnz), intent(in) :: values
-        real, dimension(ncols), intent(in) :: x
-        real, dimension(ncols), intent(inout) :: y
-        real, intent(in) :: alpha, beta
+        real(8), dimension(nnz), intent(in) :: values
+        real(8), dimension(ncols), intent(in) :: x
+        real(8), dimension(ncols), intent(inout) :: y
+        real(8), intent(in) :: alpha, beta
         real, intent(out) :: time_setup, time_spmv
         !---------------------------------------
         integer :: status
@@ -38,16 +38,16 @@ module cusparse_routines
         status = cusparseCreateCsr(matA, nrows, ncols, nnz, &
                                 csrOffsets, columns, values, &
                                 CUSPARSE_INDEX_32I, CUSPARSE_INDEX_32I, &
-                                CUSPARSE_INDEX_BASE_ONE, CUDA_R_32F)
+                                CUSPARSE_INDEX_BASE_ONE, CUDA_R_64F)
         if(status/=CUSPARSE_STATUS_SUCCESS) print *, 'cusparseCreateCsr error: ', status
 
-        status = cusparseCreateDnVec(vecX, ncols, x, CUDA_R_32F)
+        status = cusparseCreateDnVec(vecX, ncols, x, CUDA_R_64F)
         if(status/=CUSPARSE_STATUS_SUCCESS) print *, 'cusparseCreateDnVec for vecX error: ', status
-        status = cusparseCreateDnVec(vecY, ncols, y, CUDA_R_32F)
+        status = cusparseCreateDnVec(vecY, ncols, y, CUDA_R_64F)
         if(status/=CUSPARSE_STATUS_SUCCESS) print *, 'cusparseCreateDnVec for vecY error: ', status
 
         status = cusparseSpMV_bufferSize( handle, CUSPARSE_OPERATION_NON_TRANSPOSE, &
-                                    alpha, matA, vecX, beta, vecY, CUDA_R_32F, &
+                                    alpha, matA, vecX, beta, vecY, CUDA_R_64F, &
                                     CUSPARSE_SPMV_ALG_DEFAULT, bufferSize)
         if(status/=CUSPARSE_STATUS_SUCCESS) print *, 'cusparseSpMV_bufferSize error: ', status
         
@@ -62,7 +62,7 @@ module cusparse_routines
 
         call cpu_time(t0)
         status = cusparseSpMV(handle, CUSPARSE_OPERATION_NON_TRANSPOSE,&
-                            alpha, matA, vecX, beta, vecY, CUDA_R_32F,&
+                            alpha, matA, vecX, beta, vecY, CUDA_R_64F,&
                             CUSPARSE_SPMV_ALG_DEFAULT, buffer)
         if(status/=CUSPARSE_STATUS_SUCCESS) print *, 'cusparseSpMV error: ', status
         call cpu_time(t1)
