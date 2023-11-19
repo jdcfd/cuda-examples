@@ -3,7 +3,7 @@ NVHPC:=/opt/nvidia/hpc_sdk/Linux_x86_64/23.1/compilers/bin
 FC:=$(NVHPC)/nvfortran
 CC:=$(NVHPC)/nvcc
 # INCLUDE:=$(NVHPC)/compilers/include
-FFLAGS:=-acc -gpu=cc86 -Minfo=accel -cuda -cudalib=cusparse
+FFLAGS:=-acc -gpu=cc86 -Minfo=accel -cuda
 CUFLAGS:= -arch=compute_86
 EXE:= thrust_interop
 
