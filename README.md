@@ -1,4 +1,4 @@
-# oacc-examples
+# fortran-openacc-examples
 Examples of GPU acceleration with OpenACC
 
 ## Requirements
