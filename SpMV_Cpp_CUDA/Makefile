@@ -30,5 +30,5 @@ run: all
 	./$(EXE) "data/cage3.mtx" 4
 
 clean:
-	rm *.o $(EXE)
+	rm -f *.o $(EXE)
 

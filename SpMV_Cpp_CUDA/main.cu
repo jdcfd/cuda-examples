@@ -19,19 +19,14 @@ int main(int argc, char const *argv[]) {
 
     CSRMatrixReader reader(filename);
 
-    MM_typecode mmtc;
+    mymat = reader.read_mm_csr();
 
-    ierr = mm_read_banner(reader.get_fio(),&mmtc);
-    if(ierr){
-        cout << "Error reading banner!" << endl;
-        return 1;
-    }
-
-    cout << "Banner: " << mm_typecode_to_str(mmtc) << endl;
-
-    if( mymat ){
+    if( mymat != nullptr ){
         cout << "Nrows: " << mymat->nrows << " Ncols: " << mymat->ncols << endl;
         cout << "Nnz: " << mymat->nnz << endl;
+        for(int i {}; i < mymat->nnz; i++){
+            cout << "val[" << i << "]=" << mymat->values[i] << endl;
+        }
     }
 
     delete mymat; // save because pointing to nullptr

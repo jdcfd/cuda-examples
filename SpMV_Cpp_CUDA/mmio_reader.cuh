@@ -13,5 +13,5 @@ class CSRMatrixReader {
     string filename;
     CSRMatrixReader(string filename);
     ~CSRMatrixReader();
-    FILE *get_fio(){ return f; }    
+    CSRMatrix* read_mm_csr();
 };
