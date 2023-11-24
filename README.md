@@ -1,5 +1,5 @@
-# fortran-openacc-examples
-Examples of GPU acceleration with OpenACC
+# cuda-examples
+Examples of GPU acceleration with CUDA and OpenACC in C++ and Fortran.
 
 ## Requirements
 - NVIDIA HPC SDK 23.1: These examples depend on different modules and libraries like CUDA, OpenACC, cuSPARSE and Thrust. These are included in the NVIDIA HPC SDKs and are easy to include/link with NVIDIA compilers.
