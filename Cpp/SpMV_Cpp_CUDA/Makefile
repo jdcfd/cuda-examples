@@ -3,14 +3,14 @@ CXX:=nvc++
 CUC:=nvcc
 
 CFLAGS:= -fPIE
-CUFLAGS:= -O3 -arch=compute_86
+CUFLAGS:= -O3 -arch=compute_86 -I../Common
 
 EXE:=spmv
 
 SRC_CC:=mmio.c
 OBJ_CC:=$(patsubst %.c, %.o, $(SRC_CC))
 
-SRC_CU:=matrix_csr.cu mmio_reader.cu main.cu 
+SRC_CU:=matrix_csr.cu mmio_reader.cu vector_dense.cu main.cu 
 OBJ_CU:=$(patsubst %.cu, %.o, $(SRC_CU))
 
 ALL_OBJ:=$(OBJ_CC) $(OBJ_CU)

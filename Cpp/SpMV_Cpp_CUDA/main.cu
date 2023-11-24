@@ -1,4 +1,16 @@
+/*
+Author: Juan D. Colmenares F.
+User  : jdcfd@github.com
+
+Sparse Matrix-Vector multiplication in CUDA
+
+Reads in Sparse matrix in MatrixMarket COO format and multiplies
+it by a dense vector with random values.
+
+*/
+
 #include <mmio_reader.cuh>
+#include <vector_dense.cuh>
 
 using namespace std;
 
@@ -12,6 +24,12 @@ void print_mat_data(CSRMatrix * mat){
         }
     }else{
         cout << "Matrix has not been set." << endl;
+    }
+}
+
+void print_vec_data(DenseVector * v){
+    for(int i {}; i < v->size; i++){
+        cout << "v[" << i << "] = " << v->h_v[i] << endl;
     }
 }
 
@@ -40,9 +58,21 @@ int main(int argc, char const *argv[]) {
         cout << "Nrows: " << mymat->nrows << " Ncols: " << mymat->ncols << endl;
         cout << "Nnz: " << mymat->nnz << endl;
     }
-    print_mat_data(mymat);
+    mymat->update_host();
 
-    delete mymat; // save because pointing to nullptr
+    // print_mat_data(mymat); // Print all values. Commented out for large matrices.
 
-    return 0;
+    DenseVector X(mymat->ncols);
+
+    X.generate(); // Fill with random numbers 
+
+    DenseVector Y(mymat->ncols); // Initialize with zeros
+
+    print_vec_data(&X);
+    print_vec_data(&Y);
+
+    delete mymat; // Calls destroyer
+    mymat = nullptr; 
+
+    return ierr;
 }

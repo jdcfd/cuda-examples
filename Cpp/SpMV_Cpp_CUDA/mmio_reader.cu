@@ -95,6 +95,8 @@ int CSRMatrixReader::mm_read_csr(CSRMatrix *mat){
 
     /* transform the row counts to row offsets */
     thrust::exclusive_scan(mat->rows, mat->rows + m + 1, mat->rows);
+
+    mat->update_device();
     
     return ierr;
     
