@@ -27,7 +27,7 @@ $(EXE): $(ALL_OBJ)
 all: $(EXE)
 
 run: all
-	./$(EXE) "data/cage3.mtx" 4
+	./$(EXE) "data/simple1.mtx" 4
 
 clean:
 	rm -f *.o $(EXE)
