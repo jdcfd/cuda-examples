@@ -22,12 +22,15 @@ ALL_OBJ:=$(OBJ_CC) $(OBJ_CU)
 	$(CUC) $(CUFLAGS) -c $< -o $@
 
 $(EXE): $(ALL_OBJ)
-	$(CUC) -o $(EXE) $(ALL_OBJ)
+	$(CXX) -O3 -cuda -cudalib=cusparse -o $(EXE) $(ALL_OBJ)
 
 all: $(EXE)
 
 run: all
-	./$(EXE) "data/simple1.mtx" 4
+	./$(EXE) "data/1138_bus.mtx" #> stdout.txt 2>&1
+
+prof: all
+	nsys nvprof ./$(EXE) "data/1138_bus.mtx"
 
 clean:
 	rm -f *.o $(EXE)

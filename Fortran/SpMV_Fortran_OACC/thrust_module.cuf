@@ -1,4 +1,5 @@
 module thrust
+
     interface thrustsort
         subroutine sort_int(input,N) bind(C,name="sort_int_wrapper")
             use iso_c_binding
@@ -18,4 +19,20 @@ module thrust
             integer(c_int),value:: N
         end subroutine
     end interface
+
+    interface thrust_sort_by_tuple
+        subroutine thrust_sort_by_tuple_device(indx,jndx,rval,N) bind(C,name="sort_by_tuple_wrapper")
+            use iso_c_binding
+            integer(c_int), device :: indx(*), jndx(*)
+            real(c_double), device :: rval(*)
+            integer(c_int), value :: N
+        end subroutine 
+        subroutine thrust_sort_by_tuple_host(indx,jndx,rval,N) bind(C,name="sort_by_tuple_host_wrapper")
+            use iso_c_binding
+            integer(c_int) :: indx(*), jndx(*)
+            real(c_double) :: rval(*)
+            integer(c_int), value :: N
+        end subroutine 
+    end interface
+
 end module thrust

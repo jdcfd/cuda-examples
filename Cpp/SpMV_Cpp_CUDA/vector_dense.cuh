@@ -9,4 +9,7 @@ class DenseVector {
         void generate();
         void update_host();
         void update_device();
+        void print();
+        void fill(double v);
+        // void operator=(const DenseVector& dv);
 };

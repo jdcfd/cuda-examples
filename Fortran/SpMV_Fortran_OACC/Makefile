@@ -3,11 +3,12 @@ NVHPC:=/opt/nvidia/hpc_sdk/Linux_x86_64/23.1
 FC:=$(NVHPC)/compilers/bin/nvfortran
 CC:=$(NVHPC)/compilers/bin/nvcc
 # INCLUDE:=$(NVHPC)/compilers/include
-FFLAGS:=-acc -gpu=cc86 -Minfo=accel -cuda -cudalib=cusparse
-CUFLAGS:= -arch=compute_86
+FFLAGS:= -g -acc -gpu=cc86 -Minfo=accel -cuda -cudalib=cusparse
+CUFLAGS:= -g -arch=compute_86
+CUFFLAGS:= -g -gpu=cc86
 EXE:= spmv
 
-SRC_FILES := mmio.f matrix_utils.f90 spmv_driver.F90 
+SRC_FILES := mmio.f matrix_utils.f90 main.f90 
 # Create a list of object files (*.o) from source files
 OBJ_FILES := $(patsubst %.f, %.o, $(filter %.f, $(SRC_FILES))) \
              $(patsubst %.f90, %.o, $(filter %.f90, $(SRC_FILES))) 
@@ -29,14 +30,17 @@ CUF_OBJS := $(patsubst %.cuf, %.o, $(CUF_FILES))
 	$(CC) $(CUFLAGS) -c $< -o $@
 
 %.o: %.cuf
-	$(FC) -gpu=cc86 -c $< -o $@
+	$(FC) $(CUFFLAGS) -c $< -o $@
 
-all: program
+all: $(EXE)
 
-driver: $(OBJ_FILES)
+run: all
+	./$(EXE)
 
-program: driver
-	$(FC) $(FFLAGS) -o $(EXE) $(OBJ_FILES)
+$(EXE): $(CU_OBJS) $(CUF_OBJS) $(OBJ_FILES)
+	$(FC) $(FFLAGS) -o $(EXE) $(CU_OBJS) $(CUF_OBJS) $(OBJ_FILES) -lstdc++
 
 clean:
 	rm -f *.o *.mod $(EXE)
+
+.PHONY: clean all run

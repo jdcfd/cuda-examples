@@ -1,3 +1,5 @@
+#include <matrix.hpp>
+#include <matrix_csr.cuh>
 #include <mmio_reader.cuh>
 #include <thrust/sort.h>
 
@@ -10,12 +12,12 @@ CSRMatrixReader::~CSRMatrixReader(){
     fclose(this->f);
 }
 
-CSRMatrix* CSRMatrixReader::mm_init_csr(){
+int CSRMatrixReader::mm_init_csr(CSRMatrix **mat){
     int ierr;
     ierr = mm_read_banner(this->f,&(this->mmtc));
     if(ierr){
         cout << "Error reading Banner!" << endl;
-        return nullptr;
+        return -1;
     }
     else{
         cout << mm_typecode_to_str(this->mmtc) << endl;
@@ -32,7 +34,13 @@ CSRMatrix* CSRMatrixReader::mm_init_csr(){
         this->symm = true;
     }
 
-    return new CSRMatrix(nrows,ncols,nnz);
+    *mat = new CSRMatrix(nrows,ncols,nnz);
+
+    if(!(*mat)){
+        return -1;
+    }
+    
+    return 0;
 }
 
 int CSRMatrixReader::mm_read_csr(CSRMatrix *mat){
@@ -88,16 +96,16 @@ int CSRMatrixReader::mm_read_csr(CSRMatrix *mat){
       mat->rows[indx[nz]]++;
 
     /* calculate max_nnz_per_row */
-    // int max_nnz_per_row=0;
-    // for (int i = 0; i < m; ++i)
-    //   if (mat->rows[i] > max_nnz_per_row)
-    //     max_nnz_per_row = mat->rows[i];
+    int max_nnz_per_row=0;
+    for (int i = 0; i < m; ++i)
+      if (mat->rows[i] > max_nnz_per_row)
+        max_nnz_per_row = mat->rows[i];
 
     /* transform the row counts to row offsets */
     thrust::exclusive_scan(mat->rows, mat->rows + m + 1, mat->rows);
 
     mat->update_device();
     
-    return ierr;
+    return max_nnz_per_row;
     
 }

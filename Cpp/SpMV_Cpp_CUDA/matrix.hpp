@@ -1,7 +1,3 @@
-#include <cstdint>
-
-using namespace std;
-
 class MatrixBase {
     public:
     int nrows;

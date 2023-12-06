@@ -1,5 +1,7 @@
+#include <matrix.hpp>
 #include <matrix_csr.cuh>
 #include <iostream>
+#include <helper_cuda.h>
 
 CSRMatrix::CSRMatrix(int nr, int nc, int nnz) : MatrixBase(nr,nc){
     if( nnz > nr*nc ){
@@ -45,4 +47,21 @@ void CSRMatrix::update_host(){
     checkCudaErrors(cudaMemcpy(this->rows  , this->d_rows  , size_rows, cudaMemcpyDeviceToHost));
     checkCudaErrors(cudaMemcpy(this->cols  , this->d_cols  , size_cols, cudaMemcpyDeviceToHost));
     checkCudaErrors(cudaMemcpy(this->values, this->d_values, size_vals, cudaMemcpyDeviceToHost));
+}
+
+void CSRMatrix::print(){
+    this->update_host();
+    if(this->nrows > 0 && this->nnz > 0){
+        std::cout << "Nrows: " << this->nrows << " Ncols: " << this->ncols << std::endl;
+        std::cout << "Nnz: "   << this->nnz << std::endl;
+        for(int i {}; i < this->nrows + 1; i++){
+            std::cout << "rows[" << i << "] = " << this->rows[i] << std::endl;
+        }
+        for(int i {}; i < this->nnz; i++){
+            std::cout << "cols[" << i << "]= " << this->cols[i] << ", val[" << i << "]= " << this->values[i] << std::endl;
+        }
+        std::cout << std::endl;
+    }else{
+        std::cout << "Matrix has not been set." << std::endl;
+    }
 }
