@@ -4,4 +4,7 @@ Fortran implementation of sparse matrix dense vector multiplication using OpenAC
 
 - Thrust C++ library is used for sorting data to convert COO matrix to CSR.
 
+TODO:
+- implement sparse matrix multiplication using OpenACC.
+
 
