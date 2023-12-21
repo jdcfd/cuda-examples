@@ -15,7 +15,7 @@ it by a dense vector with random values.
 #include <vector_dense.cuh>
 #include <cusparse.h> 
 
-#define EPS 1e-10
+#define EPS 1e-14
 
 #define CHECK_CUSPARSE(func)                                                   \
 {                                                                              \
@@ -46,7 +46,7 @@ __global__ void sparse_mvm(int * rows, int * cols, double * vals, double * vec, 
         // Need to use templated block size to unroll loop
 #pragma unroll
         for (int i = block_size >> 1; i > 0; i >>= 1)
-            sum += __shfl_down_sync(0xffffffff,sum, i, block_size);
+            sum += __shfl_down_sync(0xffffffff,sum, i, i*2);
 
         if(!threadIdx.x){ res[row] = sum; } // write only with first thread        
     }
@@ -150,10 +150,11 @@ int main(int argc, char const *argv[]) {
     // X.print();
     // Y.print();
 
+    checkCudaErrors( cudaDeviceSynchronize() );
 
     // Using functional programming for mat mult to avoid operator overloading
 
-    // limit the number of threads per row to be no larger than the wavefront (warp) size
+    // limit the number of threads per row to be no larger than the warp size
     int block_size {32};
     while(block_size > mnnzpr){
         block_size >>= 1;

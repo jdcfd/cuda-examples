@@ -2,10 +2,10 @@ CC:=nvc
 CXX:=nvc++
 CUC:=nvcc
 
-OPT:= -g
+OPT:= -O3
 
 CFLAGS:= $(OPT) -fPIE
-CUFLAGS:= $(OPT) -G -arch=compute_86 -I../Common
+CUFLAGS:= $(OPT) --use_fast_math -arch=compute_86 -I../Common
 CXXFLAGS:= $(OPT)
 
 EXE:=spmv
@@ -38,7 +38,7 @@ debug: all
 	cuda-gdb --args ./$(EXE) $(DATA)
 
 prof: all
-	nsys profile -t cuda,cusparse ./$(EXE) $(DATA)
+	nsys profile -t cuda,cublas,nvtx -s none ./$(EXE) $(DATA)
 
 clean:
 	rm -f *.o $(EXE)
