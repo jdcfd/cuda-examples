@@ -15,6 +15,8 @@ it by a dense vector with random values.
 #include <vector_dense.cuh>
 #include <cusparse.h> 
 
+#define EPS 1e-10
+
 #define CHECK_CUSPARSE(func)                                                   \
 {                                                                              \
     cusparseStatus_t status = (func);                                          \
@@ -50,6 +52,7 @@ __global__ void sparse_mvm(int * rows, int * cols, double * vals, double * vec, 
     }
 }
 
+/*
 template <int block_size>
 __global__ void sparse_mvm_shared(int * rows, int * cols, double * vals, double * vec, double * res, int nrows, int ncols)
 {
@@ -88,17 +91,23 @@ __global__ void compare_vals(double * val1, double * val2, bool * issame, int nv
 
     __syncthreads();
     
-    for( int s = block_size >> 1; s > 0; s >>= 1 ){
+    for( int s = block_size >> 1; s > 32; s >>= 1 ){
         // threads in warp are synchronized
         if(tid < s) redux[tid] *= redux[tid + s];
-        // __syncthreads();
+        __syncthreads();
+    }
+
+#pragma unroll
+    for( int s = 32; s > 0; s >>= 1 ){
+        // threads in warp are synchronized
+        if(tid < s) redux[tid] *= redux[tid + s];
     }
 
     if(!tid){
         issame[blockIdx.x] = redux[tid];
     }
 }
-
+*/
 
 int main(int argc, char const *argv[]) {
 
@@ -113,7 +122,7 @@ int main(int argc, char const *argv[]) {
 
     // int ntrials {atoi(argv[2])};
 
-    CSRMatrix *mymat {}; //nullptr
+    CSRMatrix *mymat {}; 
 
     // mymat->print(); //segfaults
 
@@ -121,7 +130,14 @@ int main(int argc, char const *argv[]) {
 
     ierr = reader.mm_init_csr(&mymat); // allocate memory
 
+    if(ierr){
+        cout << "Error" << ierr << endl;
+        return ierr;
+    }
+
     int mnnzpr = reader.mm_read_csr(mymat); //read from file and convert from coo to csr
+
+    cout << "mnnzpr: " << mnnzpr << endl;
 
     // mymat->print(); // Print all values. Commented out for large matrices.
 
@@ -133,6 +149,7 @@ int main(int argc, char const *argv[]) {
 
     // X.print();
     // Y.print();
+
 
     // Using functional programming for mat mult to avoid operator overloading
 
@@ -151,38 +168,40 @@ int main(int argc, char const *argv[]) {
     switch (block_size)
     {
     case 128:
-        sparse_mvm<128><<<blocks,threads>>>(mymat->d_rows, mymat->d_cols, mymat->d_values, 
-                                            X.d_v, Y.d_v, mymat->nrows, mymat->ncols);
+        sparse_mvm<128><<<blocks,threads>>>(mymat->rows, mymat->cols, mymat->values, 
+                                            X.val, Y.val, mymat->nrows, mymat->ncols);
         break;
     case 64:
-        sparse_mvm<64><<<blocks,threads>>>(mymat->d_rows, mymat->d_cols, mymat->d_values, 
-                                            X.d_v, Y.d_v, mymat->nrows, mymat->ncols);
+        sparse_mvm<64><<<blocks,threads>>>(mymat->rows, mymat->cols, mymat->values, 
+                                            X.val, Y.val, mymat->nrows, mymat->ncols);
         break;
     case 32:
-        sparse_mvm<32><<<blocks,threads>>>(mymat->d_rows, mymat->d_cols, mymat->d_values, 
-                                            X.d_v, Y.d_v, mymat->nrows, mymat->ncols);
+        sparse_mvm<32><<<blocks,threads>>>(mymat->rows, mymat->cols, mymat->values, 
+                                            X.val, Y.val, mymat->nrows, mymat->ncols);
         break;
     case 16:
-        sparse_mvm<16><<<blocks,threads>>>(mymat->d_rows, mymat->d_cols, mymat->d_values, 
-                                            X.d_v, Y.d_v, mymat->nrows, mymat->ncols);
+        sparse_mvm<16><<<blocks,threads>>>(mymat->rows, mymat->cols, mymat->values, 
+                                            X.val, Y.val, mymat->nrows, mymat->ncols);
         break;
     case 8:
-        sparse_mvm<8><<<blocks,threads>>>(mymat->d_rows, mymat->d_cols, mymat->d_values, 
-                                            X.d_v, Y.d_v, mymat->nrows, mymat->ncols);
+        sparse_mvm<8><<<blocks,threads>>>(mymat->rows, mymat->cols, mymat->values, 
+                                            X.val, Y.val, mymat->nrows, mymat->ncols);
         break;
     case 4:
-        sparse_mvm<4><<<blocks,threads>>>(mymat->d_rows, mymat->d_cols, mymat->d_values, 
-                                            X.d_v, Y.d_v, mymat->nrows, mymat->ncols);
+        sparse_mvm<4><<<blocks,threads>>>(mymat->rows, mymat->cols, mymat->values, 
+                                            X.val, Y.val, mymat->nrows, mymat->ncols);
         break;
     case 2:
-        sparse_mvm<2><<<blocks,threads>>>(mymat->d_rows, mymat->d_cols, mymat->d_values, 
-                                            X.d_v, Y.d_v, mymat->nrows, mymat->ncols);
+        sparse_mvm<2><<<blocks,threads>>>(mymat->rows, mymat->cols, mymat->values, 
+                                            X.val, Y.val, mymat->nrows, mymat->ncols);
         break;
     default:
-        sparse_mvm<1><<<blocks,threads>>>(mymat->d_rows, mymat->d_cols, mymat->d_values, 
-                                            X.d_v, Y.d_v, mymat->nrows, mymat->ncols);
+        sparse_mvm<1><<<blocks,threads>>>(mymat->rows, mymat->cols, mymat->values, 
+                                            X.val, Y.val, mymat->nrows, mymat->ncols);
         break;
     }
+
+    checkCudaErrors( cudaDeviceSynchronize() );
     
     // Y.print();
 
@@ -201,13 +220,13 @@ int main(int argc, char const *argv[]) {
         CHECK_CUSPARSE( cusparseCreate(&handle) )
         // Create sparse matrix A in CSR format
         CHECK_CUSPARSE( cusparseCreateCsr(&matA, mymat->nrows, mymat->ncols, mymat->nnz,
-                                          mymat->d_rows, mymat->d_cols, mymat->d_values,
+                                          mymat->rows, mymat->cols, mymat->values,
                                           CUSPARSE_INDEX_32I, CUSPARSE_INDEX_32I,
                                           CUSPARSE_INDEX_BASE_ZERO, CUDA_R_64F) )
         // Create dense vector X
-        CHECK_CUSPARSE( cusparseCreateDnVec(&vecX, mymat->ncols, X.d_v, CUDA_R_64F) )
+        CHECK_CUSPARSE( cusparseCreateDnVec(&vecX, mymat->ncols, X.val, CUDA_R_64F) )
         // Create dense vector y
-        CHECK_CUSPARSE( cusparseCreateDnVec(&vecY, mymat->nrows, Ycsp.d_v, CUDA_R_64F) )
+        CHECK_CUSPARSE( cusparseCreateDnVec(&vecY, mymat->nrows, Ycsp.val, CUDA_R_64F) )
         // allocate an external buffer if needed
         CHECK_CUSPARSE( cusparseSpMV_bufferSize(
                                      handle, CUSPARSE_OPERATION_NON_TRANSPOSE,
@@ -229,37 +248,41 @@ int main(int argc, char const *argv[]) {
 
     // Ycsp.print();
     
-    block_size = 128;
-    int nblocks = (Y.size + block_size - 1)/block_size;
-    bool * issame_pblock;
-    checkCudaErrors( cudaMallocManaged((void **)&issame_pblock, nblocks*sizeof(bool)) );
+    // block_size = 128;
+    // int nblocks = (Y.size + block_size - 1)/block_size;
+    // bool * issame_pblock;
+    // checkCudaErrors( cudaMallocManaged((void **)&issame_pblock, nblocks*sizeof(bool)) );
 
-    // hard code block size for now
-    compare_vals<128><<<nblocks,block_size>>>(Y.d_v,Ycsp.d_v,issame_pblock, Y.size);
+    // // hard code block size for now
+    // compare_vals<128><<<nblocks,block_size>>>(Y.val,Ycsp.val,issame_pblock, Y.size);
     
     bool issame {true};    
     checkCudaErrors( cudaDeviceSynchronize() );
     
-    for( int i = 0; i < nblocks; ++i){
-        issame *= issame_pblock[i];
-        // cout << issame_pblock[i] << endl;
+    // for( int i = 0; i < nblocks; ++i){
+    //     issame *= issame_pblock[i];
+    //     // cout << issame_pblock[i] << endl;
+    // }
+
+    for( int i {}; i < Y.size; i++ ){
+        issame *= ( fabs(Y.val[i] - Ycsp.val[i]) < EPS );
     }
 
     if(issame){
         cout << "Results are correct!" << endl;
     } else {
         cout << "Results are Wrong!" << endl;
-        Y.update_host();
-        Ycsp.update_host();
 
-        for(int i = 0; i < Y.size ; ++i){
-            cout << "Y: " << Y.h_v[i] << "  Ycsp: " << Ycsp.h_v[i] << endl;
+        for(int i = 0; i < Y.size ; i++){
+            if( fabs(Y.val[i] - Ycsp.val[i]) >= EPS )
+                cout << i << ", Y: " << Y.val[i] << ",  Ycsp: " << Ycsp.val[i] << endl;
         }
     }
 
-    checkCudaErrors( cudaFree(issame_pblock));
+    // checkCudaErrors( cudaFree(issame_pblock));
 
     delete mymat; // Calls destroyer
+
     mymat = nullptr; 
 
     return ierr;

@@ -2,8 +2,11 @@ CC:=nvc
 CXX:=nvc++
 CUC:=nvcc
 
-CFLAGS:= -fPIE
-CUFLAGS:= -O3 -arch=compute_86 -I../Common
+OPT:= -g
+
+CFLAGS:= $(OPT) -fPIE
+CUFLAGS:= $(OPT) -G -arch=compute_86 -I../Common
+CXXFLAGS:= $(OPT)
 
 EXE:=spmv
 
@@ -15,6 +18,8 @@ OBJ_CU:=$(patsubst %.cu, %.o, $(SRC_CU))
 
 ALL_OBJ:=$(OBJ_CC) $(OBJ_CU)
 
+DATA="data/cfd2.mtx"
+
 %.o: %.c
 	$(CC) $(CFLAGS) -c $< -o $@
 
@@ -22,16 +27,21 @@ ALL_OBJ:=$(OBJ_CC) $(OBJ_CU)
 	$(CUC) $(CUFLAGS) -c $< -o $@
 
 $(EXE): $(ALL_OBJ)
-	$(CXX) -O3 -cuda -gpu=cc86,cuda11.8 -cudalib=cusparse -o $(EXE) $(ALL_OBJ)
+	$(CXX) $(CXXFLAGS) -cuda -gpu=cc86,cuda11.8 -cudalib=cusparse -o $(EXE) $(ALL_OBJ)
 
 all: $(EXE)
 
 run: all
-	./$(EXE) "data/1138_bus.mtx" #> stdout.txt 2>&1
+	./$(EXE) $(DATA)
+
+debug: all
+	cuda-gdb --args ./$(EXE) $(DATA)
 
 prof: all
-	nsys profile -t cuda,cusparse ./$(EXE) "data/1138_bus.mtx"
+	nsys profile -t cuda,cusparse ./$(EXE) $(DATA)
 
 clean:
 	rm -f *.o $(EXE)
+
+.PHONY: run debug prof clean
 

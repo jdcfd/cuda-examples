@@ -1,4 +1,3 @@
-#include <matrix.hpp>
 #include <matrix_csr.cuh>
 #include <mmio_reader.cuh>
 #include <thrust/sort.h>
@@ -26,26 +25,34 @@ int CSRMatrixReader::mm_init_csr(CSRMatrix **mat){
         throw std::invalid_argument("Non-sparse matrices not supported!");
     }
     int nrows, ncols, nnz;
-    ierr = mm_read_mtx_crd_size(this->f, &nrows, &ncols, &(this->nnz));
 
-    nnz = this->nnz;
+    ierr = mm_read_mtx_crd_size(this->f, &nrows, &ncols, &nnz);
+
+    this->nnz = nnz;
+
     if( mm_is_symmetric(this->mmtc) ){
         nnz = nnz * 2 - nrows; // Assumes diagonals are non-zero
         this->symm = true;
     }
 
-    *mat = new CSRMatrix(nrows,ncols,nnz);
+    if(ierr){
+        return ierr;
+    }
 
-    if(!(*mat)){
-        return -1;
+    if(*mat == nullptr){
+        *mat = new CSRMatrix(nrows, ncols, nnz);
+    }
+    else{
+        cout << "Matrix is not empty!" << endl;
+        ierr = -1;
     }
     
-    return 0;
+    return ierr;
 }
 
 int CSRMatrixReader::mm_read_csr(CSRMatrix *mat){
     
-    int indx[mat->nnz]; // Temporary rows array
+    int *indx = new int[mat->nnz]; // Temporary rows array
     int ierr {};
     int i {};
     ierr = mm_read_mtx_crd_data(this->f, mat->nrows, mat->ncols, this->nnz, 
@@ -103,9 +110,8 @@ int CSRMatrixReader::mm_read_csr(CSRMatrix *mat){
 
     /* transform the row counts to row offsets */
     thrust::exclusive_scan(mat->rows, mat->rows + m + 1, mat->rows);
-
-    mat->update_device();
     
+    delete indx;
     return max_nnz_per_row;
     
 }
