@@ -17,6 +17,16 @@ it by a dense vector with random values.
 
 #include <chrono>
 
+#define TIME_KERNEL(func)                                                   \
+{                                                                           \
+    auto t0 = std::chrono::high_resolution_clock::now();                    \
+    (func);                                         \
+    cudaDeviceSynchronize();                                                \
+    auto t1 = std::chrono::high_resolution_clock::now();                    \
+    auto timing = chrono::duration_cast<chrono::nanoseconds>(t1 - t0).count() * 1.e-6; \
+    std::cout << "-- Kernel duration: " <<  timing << " ms" << std::endl; \
+}
+
 #define EPS 1e-08
 
 #define CHECK_CUSPARSE(func)                                                   \
@@ -69,7 +79,7 @@ __global__ void sparse_mvm_shared(int * rows, int * cols, double * vals, double 
         for(int icol = threadIdx.x + start; icol < end; icol += block_size ){
             sum[block_size*threadIdx.y + threadIdx.x] += vals[icol] * vec[cols[icol]];
         }
-        // __syncthreads();
+        __syncthreads();
 
         // Need to use templated block size to unroll loop
 #pragma unroll
@@ -82,6 +92,27 @@ __global__ void sparse_mvm_shared(int * rows, int * cols, double * vals, double 
     }
 }
 
+void compare_values(DenseVector *Y, DenseVector *Yref)
+{
+    bool issame {true};
+
+    for( int i {}; i < Y->size; i++ ){
+        issame *= ( fabs(Y->h_val[i] - Yref->h_val[i]) < EPS );
+    }
+
+    if(issame){
+        cout << "-- Results are correct!" << endl;
+    } else {
+        cout << "-- Results are Wrong!" << endl;
+
+        /*********
+        for(int i = 0; i < Y->size ; i++){
+            if( fabs(Y->h_val[i] - Yref->h_val[i]) >= EPS )
+                cout << i << ", Y: " << Y->h_val[i] << ",  Ycsp: " << Yref->h_val[i] << endl;
+        }
+        *********/
+    }
+}
 
 void run_test(int block_size, CSRMatrix *mymat, DenseVector *X, DenseVector *Y, int mnnzpr, bool shared = false){
     // limit the number of threads per row to be no larger than the warp size
@@ -93,64 +124,53 @@ void run_test(int block_size, CSRMatrix *mymat, DenseVector *X, DenseVector *Y, 
     dim3 threads(block_size, rows_per_block, 1);
     size_t shms = 1024*sizeof(double);
 
+    cout << "Running test with block_size=" << block_size << " and shared=" << (shared ? "true" : "false") << endl;
+
     switch (block_size)
     {
     case 128:
         if(shared){
-            sparse_mvm_shared<128><<<blocks,threads,shms>>>(mymat->d_rows, mymat->d_cols, mymat->d_values, 
-                                            X->d_val, Y->d_val, mymat->nrows, mymat->ncols);
+            TIME_KERNEL((sparse_mvm_shared<128><<<blocks,threads,shms>>>(mymat->d_rows, mymat->d_cols, mymat->d_values,X->d_val, Y->d_val, mymat->nrows, mymat->ncols)))
         }else{
-            sparse_mvm<128><<<blocks,threads>>>(mymat->d_rows, mymat->d_cols, mymat->d_values, 
-                                            X->d_val, Y->d_val, mymat->nrows, mymat->ncols);
+            TIME_KERNEL((sparse_mvm<128><<<blocks,threads>>>(mymat->d_rows, mymat->d_cols, mymat->d_values,X->d_val, Y->d_val, mymat->nrows, mymat->ncols)))
         }
         break;
     case 64:
         if(shared){
-            sparse_mvm_shared<64><<<blocks,threads,shms>>>(mymat->d_rows, mymat->d_cols, mymat->d_values, 
-                                            X->d_val, Y->d_val, mymat->nrows, mymat->ncols);
+            TIME_KERNEL((sparse_mvm_shared<64><<<blocks,threads,shms>>>(mymat->d_rows, mymat->d_cols, mymat->d_values,X->d_val, Y->d_val, mymat->nrows, mymat->ncols)))
         }else{
-            sparse_mvm<64><<<blocks,threads>>>(mymat->d_rows, mymat->d_cols, mymat->d_values, 
-                                            X->d_val, Y->d_val, mymat->nrows, mymat->ncols);
+            TIME_KERNEL((sparse_mvm<64><<<blocks,threads>>>(mymat->d_rows, mymat->d_cols, mymat->d_values,X->d_val, Y->d_val, mymat->nrows, mymat->ncols)))
         }
         break;
     case 32:
         if(shared){
-            sparse_mvm_shared<32><<<blocks,threads,shms>>>(mymat->d_rows, mymat->d_cols, mymat->d_values, 
-                                            X->d_val, Y->d_val, mymat->nrows, mymat->ncols);
+            TIME_KERNEL((sparse_mvm_shared<32><<<blocks,threads,shms>>>(mymat->d_rows, mymat->d_cols, mymat->d_values,X->d_val, Y->d_val, mymat->nrows, mymat->ncols)))
         }else{
-            sparse_mvm<32><<<blocks,threads>>>(mymat->d_rows, mymat->d_cols, mymat->d_values, 
-                                            X->d_val, Y->d_val, mymat->nrows, mymat->ncols);
+            TIME_KERNEL((sparse_mvm<32><<<blocks,threads>>>(mymat->d_rows, mymat->d_cols, mymat->d_values,X->d_val, Y->d_val, mymat->nrows, mymat->ncols)))
         }
         break;
     case 16:
         if(shared){
-            sparse_mvm_shared<16><<<blocks,threads,shms>>>(mymat->d_rows, mymat->d_cols, mymat->d_values, 
-                                            X->d_val, Y->d_val, mymat->nrows, mymat->ncols);
+            TIME_KERNEL((sparse_mvm_shared<16><<<blocks,threads,shms>>>(mymat->d_rows, mymat->d_cols, mymat->d_values,X->d_val, Y->d_val, mymat->nrows, mymat->ncols)))
         }else{
-            sparse_mvm<16><<<blocks,threads>>>(mymat->d_rows, mymat->d_cols, mymat->d_values, 
-                                            X->d_val, Y->d_val, mymat->nrows, mymat->ncols);
+            TIME_KERNEL((sparse_mvm<16><<<blocks,threads>>>(mymat->d_rows, mymat->d_cols, mymat->d_values,X->d_val, Y->d_val, mymat->nrows, mymat->ncols)))
         }
         break;
     case 8:
         if(shared){
-            sparse_mvm_shared<8><<<blocks,threads,shms>>>(mymat->d_rows, mymat->d_cols, mymat->d_values, 
-                                            X->d_val, Y->d_val, mymat->nrows, mymat->ncols);
+            TIME_KERNEL((sparse_mvm_shared<8><<<blocks,threads,shms>>>(mymat->d_rows, mymat->d_cols, mymat->d_values,X->d_val, Y->d_val, mymat->nrows, mymat->ncols)))
         }else{
-            sparse_mvm<8><<<blocks,threads>>>(mymat->d_rows, mymat->d_cols, mymat->d_values, 
-                                            X->d_val, Y->d_val, mymat->nrows, mymat->ncols);
+            TIME_KERNEL((sparse_mvm<8><<<blocks,threads>>>(mymat->d_rows, mymat->d_cols, mymat->d_values,X->d_val, Y->d_val, mymat->nrows, mymat->ncols)))
         }
         break;
     case 4:
-        sparse_mvm<4><<<blocks,threads>>>(mymat->d_rows, mymat->d_cols, mymat->d_values, 
-                                            X->d_val, Y->d_val, mymat->nrows, mymat->ncols);
+        TIME_KERNEL((sparse_mvm<4><<<blocks,threads>>>(mymat->d_rows, mymat->d_cols, mymat->d_values,X->d_val, Y->d_val, mymat->nrows, mymat->ncols)))
         break;
     case 2:
-        sparse_mvm<2><<<blocks,threads>>>(mymat->d_rows, mymat->d_cols, mymat->d_values, 
-                                            X->d_val, Y->d_val, mymat->nrows, mymat->ncols);
+        TIME_KERNEL((sparse_mvm<2><<<blocks,threads>>>(mymat->d_rows, mymat->d_cols, mymat->d_values,X->d_val, Y->d_val, mymat->nrows, mymat->ncols)))
         break;
     default:
-        sparse_mvm<1><<<blocks,threads>>>(mymat->d_rows, mymat->d_cols, mymat->d_values, 
-                                            X->d_val, Y->d_val, mymat->nrows, mymat->ncols);
+        TIME_KERNEL((sparse_mvm<1><<<blocks,threads>>>(mymat->d_rows, mymat->d_cols, mymat->d_values,X->d_val, Y->d_val, mymat->nrows, mymat->ncols)))
         break;
     }
 }
@@ -196,20 +216,6 @@ int main(int argc, char const *argv[]) {
     // X.print();
     // Y.print();
 
-    // Using functional programming for mat mult to avoid operator overloading
-    // No Need for warmup since threads have been used before to intialize vars
-
-    for( int bs = 128; bs > 2; bs >>= 1){
-        if(avgnnzpr > bs){
-            run_test(bs,mymat,&X,&Y,mnnzpr); 
-            run_test(bs,mymat,&X,&Y,mnnzpr,true); 
-        }
-    }
-
-    Y.update_host(); // only comparing results from last test
-    
-    // Y.print();
-
     DenseVector Ycsp(mymat->ncols); // Initialize with zeros
 
     // Use cuSparse
@@ -252,22 +258,17 @@ int main(int argc, char const *argv[]) {
     }
 
     Ycsp.update_host();
-    // Ycsp.print();
-        
-    bool issame {true};    
 
-    for( int i {}; i < Y.size; i++ ){
-        issame *= ( fabs(Y.h_val[i] - Ycsp.h_val[i]) < EPS );
-    }
+    for( int bs = 128; bs > 2; bs >>= 1){
+        if(true){
+            run_test(bs,mymat,&X,&Y,mnnzpr); 
+            Y.update_host(); // only comparing results from last test
+            compare_values(&Y, &Ycsp);
 
-    if(issame){
-        cout << "Results are correct!" << endl;
-    } else {
-        cout << "Results are Wrong!" << endl;
-
-        for(int i = 0; i < Y.size ; i++){
-            if( fabs(Y.h_val[i] - Ycsp.h_val[i]) >= EPS )
-                cout << i << ", Y: " << Y.h_val[i] << ",  Ycsp: " << Ycsp.h_val[i] << endl;
+            run_test(bs,mymat,&X,&Y,mnnzpr,true); 
+            Y.update_host(); // only comparing results from last test
+            compare_values(&Y, &Ycsp);
+            cout << endl;
         }
     }
 
