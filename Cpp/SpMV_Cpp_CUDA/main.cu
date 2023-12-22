@@ -15,7 +15,9 @@ it by a dense vector with random values.
 #include <vector_dense.cuh>
 #include <cusparse.h> 
 
-#define EPS 1e-14
+#include <chrono>
+
+#define EPS 1e-08
 
 #define CHECK_CUSPARSE(func)                                                   \
 {                                                                              \
@@ -52,66 +54,91 @@ __global__ void sparse_mvm(int * rows, int * cols, double * vals, double * vec, 
     }
 }
 
-/*
+
 template <int block_size>
 __global__ void sparse_mvm_shared(int * rows, int * cols, double * vals, double * vec, double * res, int nrows, int ncols)
 {
-    // Block index
+     // Block index
     int row = threadIdx.y + blockDim.y*blockIdx.x;
-    double shared [block_size];
+    extern __shared__ double sum[];
     if(row < nrows){
         int start {rows[row]};
         int end {rows[row+1]}; 
-        double sum = 0.0;
+        sum[block_size*threadIdx.y + threadIdx.x] = 0.0;
 
         for(int icol = threadIdx.x + start; icol < end; icol += block_size ){
-            sum += vals[icol] * vec[cols[icol]];
+            sum[block_size*threadIdx.y + threadIdx.x] += vals[icol] * vec[cols[icol]];
         }
+        // __syncthreads();
 
         // Need to use templated block size to unroll loop
 #pragma unroll
-        for (int i = block_size >> 1; i > 0; i >>= 1)
-            sum += __shfl_down_sync(0xffffffff,sum, i, block_size);
+        for (int i = block_size >> 1; i > 0; i >>= 1){
+            if(threadIdx.x < i) sum[block_size*threadIdx.y + threadIdx.x] += sum[block_size*threadIdx.y + threadIdx.x + i];
+            __syncthreads();
+        }
 
-        if(!threadIdx.x){ res[row] = sum; } // write only with first thread        
+        if(!threadIdx.x){ res[row] = sum[block_size*threadIdx.y + threadIdx.x]; } // write only with first thread        
     }
 }
-*/
 
-void run_test(CSRMatrix *mymat, DenseVector *X, DenseVector *Y, int mnnzpr){
+
+void run_test(int block_size, CSRMatrix *mymat, DenseVector *X, DenseVector *Y, int mnnzpr, bool shared = false){
     // limit the number of threads per row to be no larger than the warp size
-    int block_size {32};
-    while(block_size > mnnzpr){
-        block_size >>= 1;
-    }
 
     int rows_per_block = 1024 / block_size;
     int num_blocks = (mymat->nrows + rows_per_block - 1) / rows_per_block;
     
     dim3 blocks(num_blocks, 1, 1);
     dim3 threads(block_size, rows_per_block, 1);
+    size_t shms = 1024*sizeof(double);
 
     switch (block_size)
     {
     case 128:
-        sparse_mvm<128><<<blocks,threads>>>(mymat->d_rows, mymat->d_cols, mymat->d_values, 
+        if(shared){
+            sparse_mvm_shared<128><<<blocks,threads,shms>>>(mymat->d_rows, mymat->d_cols, mymat->d_values, 
                                             X->d_val, Y->d_val, mymat->nrows, mymat->ncols);
+        }else{
+            sparse_mvm<128><<<blocks,threads>>>(mymat->d_rows, mymat->d_cols, mymat->d_values, 
+                                            X->d_val, Y->d_val, mymat->nrows, mymat->ncols);
+        }
         break;
     case 64:
-        sparse_mvm<64><<<blocks,threads>>>(mymat->d_rows, mymat->d_cols, mymat->d_values, 
+        if(shared){
+            sparse_mvm_shared<64><<<blocks,threads,shms>>>(mymat->d_rows, mymat->d_cols, mymat->d_values, 
                                             X->d_val, Y->d_val, mymat->nrows, mymat->ncols);
+        }else{
+            sparse_mvm<64><<<blocks,threads>>>(mymat->d_rows, mymat->d_cols, mymat->d_values, 
+                                            X->d_val, Y->d_val, mymat->nrows, mymat->ncols);
+        }
         break;
     case 32:
-        sparse_mvm<32><<<blocks,threads>>>(mymat->d_rows, mymat->d_cols, mymat->d_values, 
+        if(shared){
+            sparse_mvm_shared<32><<<blocks,threads,shms>>>(mymat->d_rows, mymat->d_cols, mymat->d_values, 
                                             X->d_val, Y->d_val, mymat->nrows, mymat->ncols);
+        }else{
+            sparse_mvm<32><<<blocks,threads>>>(mymat->d_rows, mymat->d_cols, mymat->d_values, 
+                                            X->d_val, Y->d_val, mymat->nrows, mymat->ncols);
+        }
         break;
     case 16:
-        sparse_mvm<16><<<blocks,threads>>>(mymat->d_rows, mymat->d_cols, mymat->d_values, 
+        if(shared){
+            sparse_mvm_shared<16><<<blocks,threads,shms>>>(mymat->d_rows, mymat->d_cols, mymat->d_values, 
                                             X->d_val, Y->d_val, mymat->nrows, mymat->ncols);
+        }else{
+            sparse_mvm<16><<<blocks,threads>>>(mymat->d_rows, mymat->d_cols, mymat->d_values, 
+                                            X->d_val, Y->d_val, mymat->nrows, mymat->ncols);
+        }
         break;
     case 8:
-        sparse_mvm<8><<<blocks,threads>>>(mymat->d_rows, mymat->d_cols, mymat->d_values, 
+        if(shared){
+            sparse_mvm_shared<8><<<blocks,threads,shms>>>(mymat->d_rows, mymat->d_cols, mymat->d_values, 
                                             X->d_val, Y->d_val, mymat->nrows, mymat->ncols);
+        }else{
+            sparse_mvm<8><<<blocks,threads>>>(mymat->d_rows, mymat->d_cols, mymat->d_values, 
+                                            X->d_val, Y->d_val, mymat->nrows, mymat->ncols);
+        }
         break;
     case 4:
         sparse_mvm<4><<<blocks,threads>>>(mymat->d_rows, mymat->d_cols, mymat->d_values, 
@@ -153,8 +180,10 @@ int main(int argc, char const *argv[]) {
     }
 
     int mnnzpr = reader.mm_read_csr(mymat); //read from file and convert from coo to csr
-
+    int avgnnzpr = mymat->nnz/mymat->nrows;
+    cout << "nrows, ncols, nnz: " << mymat->nrows << ' ' << mymat->ncols << ' '  << mymat->nnz << endl;
     cout << "mnnzpr: " << mnnzpr << endl;
+    cout << "avg nnzpr: " << avgnnzpr << endl;
 
     // mymat->print(); // Print all values. Commented out for large matrices.
 
@@ -169,9 +198,15 @@ int main(int argc, char const *argv[]) {
 
     // Using functional programming for mat mult to avoid operator overloading
     // No Need for warmup since threads have been used before to intialize vars
-    run_test(mymat,&X,&Y,mnnzpr); 
 
-    Y.update_host();
+    for( int bs = 128; bs > 2; bs >>= 1){
+        if(avgnnzpr > bs){
+            run_test(bs,mymat,&X,&Y,mnnzpr); 
+            run_test(bs,mymat,&X,&Y,mnnzpr,true); 
+        }
+    }
+
+    Y.update_host(); // only comparing results from last test
     
     // Y.print();
 

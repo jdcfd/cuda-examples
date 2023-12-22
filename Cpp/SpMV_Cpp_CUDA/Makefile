@@ -18,7 +18,7 @@ OBJ_CU:=$(patsubst %.cu, %.o, $(SRC_CU))
 
 ALL_OBJ:=$(OBJ_CC) $(OBJ_CU)
 
-DATA="data/cfd2.mtx"
+DATA="data/RM07R.mtx"
 
 %.o: %.c
 	$(CC) $(CFLAGS) -c $< -o $@
@@ -38,7 +38,7 @@ debug: all
 	cuda-gdb --args ./$(EXE) $(DATA)
 
 prof: all
-	nsys profile -t cuda,cublas,nvtx -s none ./$(EXE) $(DATA)
+	nsys profile -t cuda,cublas,nvtx -s none --stats true ./$(EXE) $(DATA)
 
 clean:
 	rm -f *.o $(EXE)

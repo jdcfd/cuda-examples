@@ -14,9 +14,9 @@ CSRMatrix::CSRMatrix(int nr, int nc, int nnz) {
 }
 
 void CSRMatrix::alloc_mem(){
-    this->h_rows = new int[this->nrows+1];
-    this->h_cols = new int[this->nnz];
-    this->h_values = new double[this->nnz];
+    checkCudaErrors(cudaMallocHost(reinterpret_cast<void **> (&(this->h_rows)),sizeof(int)*(this->nrows+1)));
+    checkCudaErrors(cudaMallocHost(reinterpret_cast<void **> (&(this->h_cols)),sizeof(int)*(this->nnz)));
+    checkCudaErrors(cudaMallocHost(reinterpret_cast<void **> (&(this->h_values)),sizeof(double)*(this->nnz)));
 
     checkCudaErrors(cudaMalloc(reinterpret_cast<void **> (&(this->d_rows)),sizeof(int)*(this->nrows+1)));
     checkCudaErrors(cudaMalloc(reinterpret_cast<void **> (&(this->d_cols)),sizeof(int)*(this->nnz)));
@@ -24,9 +24,12 @@ void CSRMatrix::alloc_mem(){
 }
 
 void CSRMatrix::free_mem(){
-    delete this->h_rows;
-    delete this->h_cols;
-    delete this->h_values;
+    checkCudaErrors(cudaFreeHost(this->h_rows));
+    checkCudaErrors(cudaFreeHost(this->h_cols));
+    checkCudaErrors(cudaFreeHost(this->h_values));
+    this->h_rows = nullptr;
+    this->h_cols = nullptr;
+    this->h_values = nullptr;
 
     checkCudaErrors(cudaFree(this->d_rows));
     checkCudaErrors(cudaFree(this->d_cols));
@@ -44,15 +47,17 @@ CSRMatrix::~CSRMatrix(){
 }
 
 void CSRMatrix::update_host(){
-    checkCudaErrors(cudaMemcpy(this->h_values,this->d_values,sizeof(double)*this->nnz,cudaMemcpyDeviceToHost));
-    checkCudaErrors(cudaMemcpy(this->h_rows,this->d_rows,sizeof(int)*(this->nrows+1),cudaMemcpyDeviceToHost));
-    checkCudaErrors(cudaMemcpy(this->h_cols,this->d_cols,sizeof(int)*this->nnz,cudaMemcpyDeviceToHost));
+    checkCudaErrors(cudaMemcpyAsync(this->h_values,this->d_values,sizeof(double)*this->nnz,cudaMemcpyDeviceToHost));
+    checkCudaErrors(cudaMemcpyAsync(this->h_cols,this->d_cols,sizeof(int)*this->nnz,cudaMemcpyDeviceToHost));
+    checkCudaErrors(cudaMemcpyAsync(this->h_rows,this->d_rows,sizeof(int)*(this->nrows+1),cudaMemcpyDeviceToHost));
+    cudaDeviceSynchronize();
 }
 
 void CSRMatrix::update_device(){
-    checkCudaErrors(cudaMemcpy(this->d_values,this->h_values,sizeof(double)*this->nnz,cudaMemcpyHostToDevice));
-    checkCudaErrors(cudaMemcpy(this->d_rows,this->h_rows,sizeof(int)*(this->nrows+1),cudaMemcpyHostToDevice));
-    checkCudaErrors(cudaMemcpy(this->d_cols,this->h_cols,sizeof(int)*this->nnz,cudaMemcpyHostToDevice));
+    checkCudaErrors(cudaMemcpyAsync(this->d_values,this->h_values,sizeof(double)*this->nnz,cudaMemcpyHostToDevice));
+    checkCudaErrors(cudaMemcpyAsync(this->d_cols,this->h_cols,sizeof(int)*this->nnz,cudaMemcpyHostToDevice));
+    checkCudaErrors(cudaMemcpyAsync(this->d_rows,this->h_rows,sizeof(int)*(this->nrows+1),cudaMemcpyHostToDevice));
+    cudaDeviceSynchronize();
 }
 
 void CSRMatrix::print(){

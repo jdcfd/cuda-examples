@@ -6,14 +6,15 @@
 
 DenseVector::DenseVector(int n){
     this->size = n;
-    this->h_val = new double[n];
+    checkCudaErrors(cudaMallocHost(reinterpret_cast<void **> (&(this->h_val)),sizeof(double)*(n)));
     checkCudaErrors(cudaMalloc(reinterpret_cast<void **> (&(this->d_val)),sizeof(double)*(n)));
     this->fill(0.0);
 }
 
 DenseVector::~DenseVector(){
-    delete this->h_val;
+    checkCudaErrors(cudaFreeHost(this->h_val));
     checkCudaErrors(cudaFree(this->d_val));
+    this->h_val = nullptr;
     this->d_val = nullptr;
     this->size = 0;
 }
