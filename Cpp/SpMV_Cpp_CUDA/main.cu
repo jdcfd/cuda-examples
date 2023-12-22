@@ -76,38 +76,57 @@ __global__ void sparse_mvm_shared(int * rows, int * cols, double * vals, double 
         if(!threadIdx.x){ res[row] = sum; } // write only with first thread        
     }
 }
+*/
 
-template<int block_size>
-__global__ void compare_vals(double * val1, double * val2, bool * issame, int nval){
-    __shared__ bool redux[block_size];
-    int tid = threadIdx.x;
-    int id = blockDim.x * blockIdx.x + threadIdx.x;
-
-    redux[tid] = true;
-    if( id < nval ){
-        redux[tid] = fabs(val1[id] - val2[id]) < 1.0e-10;
-        // printf("boolean true: %s\n", redux[tid] ? "true" : "false"); 
+void run_test(CSRMatrix *mymat, DenseVector *X, DenseVector *Y, int mnnzpr){
+    // limit the number of threads per row to be no larger than the warp size
+    int block_size {32};
+    while(block_size > mnnzpr){
+        block_size >>= 1;
     }
 
-    __syncthreads();
+    int rows_per_block = 1024 / block_size;
+    int num_blocks = (mymat->nrows + rows_per_block - 1) / rows_per_block;
     
-    for( int s = block_size >> 1; s > 32; s >>= 1 ){
-        // threads in warp are synchronized
-        if(tid < s) redux[tid] *= redux[tid + s];
-        __syncthreads();
-    }
+    dim3 blocks(num_blocks, 1, 1);
+    dim3 threads(block_size, rows_per_block, 1);
 
-#pragma unroll
-    for( int s = 32; s > 0; s >>= 1 ){
-        // threads in warp are synchronized
-        if(tid < s) redux[tid] *= redux[tid + s];
-    }
-
-    if(!tid){
-        issame[blockIdx.x] = redux[tid];
+    switch (block_size)
+    {
+    case 128:
+        sparse_mvm<128><<<blocks,threads>>>(mymat->d_rows, mymat->d_cols, mymat->d_values, 
+                                            X->d_val, Y->d_val, mymat->nrows, mymat->ncols);
+        break;
+    case 64:
+        sparse_mvm<64><<<blocks,threads>>>(mymat->d_rows, mymat->d_cols, mymat->d_values, 
+                                            X->d_val, Y->d_val, mymat->nrows, mymat->ncols);
+        break;
+    case 32:
+        sparse_mvm<32><<<blocks,threads>>>(mymat->d_rows, mymat->d_cols, mymat->d_values, 
+                                            X->d_val, Y->d_val, mymat->nrows, mymat->ncols);
+        break;
+    case 16:
+        sparse_mvm<16><<<blocks,threads>>>(mymat->d_rows, mymat->d_cols, mymat->d_values, 
+                                            X->d_val, Y->d_val, mymat->nrows, mymat->ncols);
+        break;
+    case 8:
+        sparse_mvm<8><<<blocks,threads>>>(mymat->d_rows, mymat->d_cols, mymat->d_values, 
+                                            X->d_val, Y->d_val, mymat->nrows, mymat->ncols);
+        break;
+    case 4:
+        sparse_mvm<4><<<blocks,threads>>>(mymat->d_rows, mymat->d_cols, mymat->d_values, 
+                                            X->d_val, Y->d_val, mymat->nrows, mymat->ncols);
+        break;
+    case 2:
+        sparse_mvm<2><<<blocks,threads>>>(mymat->d_rows, mymat->d_cols, mymat->d_values, 
+                                            X->d_val, Y->d_val, mymat->nrows, mymat->ncols);
+        break;
+    default:
+        sparse_mvm<1><<<blocks,threads>>>(mymat->d_rows, mymat->d_cols, mymat->d_values, 
+                                            X->d_val, Y->d_val, mymat->nrows, mymat->ncols);
+        break;
     }
 }
-*/
 
 int main(int argc, char const *argv[]) {
 
@@ -123,8 +142,6 @@ int main(int argc, char const *argv[]) {
     // int ntrials {atoi(argv[2])};
 
     CSRMatrix *mymat {}; 
-
-    // mymat->print(); //segfaults
 
     CSRMatrixReader reader(filename);
 
@@ -150,59 +167,11 @@ int main(int argc, char const *argv[]) {
     // X.print();
     // Y.print();
 
-    checkCudaErrors( cudaDeviceSynchronize() );
-
     // Using functional programming for mat mult to avoid operator overloading
+    // No Need for warmup since threads have been used before to intialize vars
+    run_test(mymat,&X,&Y,mnnzpr); 
 
-    // limit the number of threads per row to be no larger than the warp size
-    int block_size {32};
-    while(block_size > mnnzpr){
-        block_size >>= 1;
-    }
-
-    int rows_per_block = 1024 / block_size;
-    int num_blocks = (mymat->nrows + rows_per_block - 1) / rows_per_block;
-    
-    dim3 blocks(num_blocks, 1, 1);
-    dim3 threads(block_size, rows_per_block, 1);
-
-    switch (block_size)
-    {
-    case 128:
-        sparse_mvm<128><<<blocks,threads>>>(mymat->rows, mymat->cols, mymat->values, 
-                                            X.val, Y.val, mymat->nrows, mymat->ncols);
-        break;
-    case 64:
-        sparse_mvm<64><<<blocks,threads>>>(mymat->rows, mymat->cols, mymat->values, 
-                                            X.val, Y.val, mymat->nrows, mymat->ncols);
-        break;
-    case 32:
-        sparse_mvm<32><<<blocks,threads>>>(mymat->rows, mymat->cols, mymat->values, 
-                                            X.val, Y.val, mymat->nrows, mymat->ncols);
-        break;
-    case 16:
-        sparse_mvm<16><<<blocks,threads>>>(mymat->rows, mymat->cols, mymat->values, 
-                                            X.val, Y.val, mymat->nrows, mymat->ncols);
-        break;
-    case 8:
-        sparse_mvm<8><<<blocks,threads>>>(mymat->rows, mymat->cols, mymat->values, 
-                                            X.val, Y.val, mymat->nrows, mymat->ncols);
-        break;
-    case 4:
-        sparse_mvm<4><<<blocks,threads>>>(mymat->rows, mymat->cols, mymat->values, 
-                                            X.val, Y.val, mymat->nrows, mymat->ncols);
-        break;
-    case 2:
-        sparse_mvm<2><<<blocks,threads>>>(mymat->rows, mymat->cols, mymat->values, 
-                                            X.val, Y.val, mymat->nrows, mymat->ncols);
-        break;
-    default:
-        sparse_mvm<1><<<blocks,threads>>>(mymat->rows, mymat->cols, mymat->values, 
-                                            X.val, Y.val, mymat->nrows, mymat->ncols);
-        break;
-    }
-
-    checkCudaErrors( cudaDeviceSynchronize() );
+    Y.update_host();
     
     // Y.print();
 
@@ -221,13 +190,13 @@ int main(int argc, char const *argv[]) {
         CHECK_CUSPARSE( cusparseCreate(&handle) )
         // Create sparse matrix A in CSR format
         CHECK_CUSPARSE( cusparseCreateCsr(&matA, mymat->nrows, mymat->ncols, mymat->nnz,
-                                          mymat->rows, mymat->cols, mymat->values,
+                                          mymat->d_rows, mymat->d_cols, mymat->d_values,
                                           CUSPARSE_INDEX_32I, CUSPARSE_INDEX_32I,
                                           CUSPARSE_INDEX_BASE_ZERO, CUDA_R_64F) )
         // Create dense vector X
-        CHECK_CUSPARSE( cusparseCreateDnVec(&vecX, mymat->ncols, X.val, CUDA_R_64F) )
+        CHECK_CUSPARSE( cusparseCreateDnVec(&vecX, mymat->ncols, X.d_val, CUDA_R_64F) )
         // Create dense vector y
-        CHECK_CUSPARSE( cusparseCreateDnVec(&vecY, mymat->nrows, Ycsp.val, CUDA_R_64F) )
+        CHECK_CUSPARSE( cusparseCreateDnVec(&vecY, mymat->nrows, Ycsp.d_val, CUDA_R_64F) )
         // allocate an external buffer if needed
         CHECK_CUSPARSE( cusparseSpMV_bufferSize(
                                      handle, CUSPARSE_OPERATION_NON_TRANSPOSE,
@@ -247,26 +216,13 @@ int main(int argc, char const *argv[]) {
         CHECK_CUSPARSE( cusparseDestroy(handle) )
     }
 
+    Ycsp.update_host();
     // Ycsp.print();
-    
-    // block_size = 128;
-    // int nblocks = (Y.size + block_size - 1)/block_size;
-    // bool * issame_pblock;
-    // checkCudaErrors( cudaMallocManaged((void **)&issame_pblock, nblocks*sizeof(bool)) );
-
-    // // hard code block size for now
-    // compare_vals<128><<<nblocks,block_size>>>(Y.val,Ycsp.val,issame_pblock, Y.size);
-    
+        
     bool issame {true};    
-    checkCudaErrors( cudaDeviceSynchronize() );
-    
-    // for( int i = 0; i < nblocks; ++i){
-    //     issame *= issame_pblock[i];
-    //     // cout << issame_pblock[i] << endl;
-    // }
 
     for( int i {}; i < Y.size; i++ ){
-        issame *= ( fabs(Y.val[i] - Ycsp.val[i]) < EPS );
+        issame *= ( fabs(Y.h_val[i] - Ycsp.h_val[i]) < EPS );
     }
 
     if(issame){
@@ -275,12 +231,10 @@ int main(int argc, char const *argv[]) {
         cout << "Results are Wrong!" << endl;
 
         for(int i = 0; i < Y.size ; i++){
-            if( fabs(Y.val[i] - Ycsp.val[i]) >= EPS )
-                cout << i << ", Y: " << Y.val[i] << ",  Ycsp: " << Ycsp.val[i] << endl;
+            if( fabs(Y.h_val[i] - Ycsp.h_val[i]) >= EPS )
+                cout << i << ", Y: " << Y.h_val[i] << ",  Ycsp: " << Ycsp.h_val[i] << endl;
         }
     }
-
-    // checkCudaErrors( cudaFree(issame_pblock));
 
     delete mymat; // Calls destroyer
 

@@ -56,12 +56,12 @@ int CSRMatrixReader::mm_read_csr(CSRMatrix *mat){
     int ierr {};
     int i {};
     ierr = mm_read_mtx_crd_data(this->f, mat->nrows, mat->ncols, this->nnz, 
-                                indx, mat->cols, mat->values, this->mmtc);
+                                indx, mat->h_cols, mat->h_values, this->mmtc);
 
     for(i=0;i < this->nnz; i++){
         // Subtract 1 for 0-indexing
         indx[i]--;
-        mat->cols[i]--;
+        mat->h_cols[i]--;
     }
 
     if(ierr){
@@ -72,10 +72,10 @@ int CSRMatrixReader::mm_read_csr(CSRMatrix *mat){
     if(this->symm){
         int k {this->nnz};
         for(int i=0; i < this->nnz; i++){
-            if( indx[i] != mat->cols[i] ){
-                indx[k] = mat->cols[i];
-                mat->cols[k] = indx[i];
-                mat->values[k] = mat->values[i];
+            if( indx[i] != mat->h_cols[i] ){
+                indx[k] = mat->h_cols[i];
+                mat->h_cols[k] = indx[i];
+                mat->h_values[k] = mat->h_values[i];
                 k++;
             }
         }
@@ -90,26 +90,28 @@ int CSRMatrixReader::mm_read_csr(CSRMatrix *mat){
 
     /* sort the coo matrix */
     auto begin_keys =
-      thrust::make_zip_iterator(thrust::make_tuple( &indx[0], mat->cols ));
+      thrust::make_zip_iterator(thrust::make_tuple( &indx[0], mat->h_cols ));
     auto end_keys =
-      thrust::make_zip_iterator(thrust::make_tuple( &indx[0] + nnz, mat->cols + nnz));
+      thrust::make_zip_iterator(thrust::make_tuple( &indx[0] + nnz, mat->h_cols + nnz));
 
-    thrust::stable_sort_by_key(thrust::host, begin_keys, end_keys, mat->values,
+    thrust::stable_sort_by_key(thrust::host, begin_keys, end_keys, mat->h_values,
                       thrust::less<thrust::tuple<int, int>>());
 
     /* fill the row counts */
-    thrust::fill(thrust::host, mat->rows, mat->rows + m + 1, 0);
+    thrust::fill(thrust::host, mat->h_rows, mat->h_rows + m + 1, 0);
     for (int nz = 0; nz < nnz; ++nz)
-      mat->rows[indx[nz]]++;
+      mat->h_rows[indx[nz]]++;
 
     /* calculate max_nnz_per_row */
     int max_nnz_per_row=0;
     for (int i = 0; i < m; ++i)
-      if (mat->rows[i] > max_nnz_per_row)
-        max_nnz_per_row = mat->rows[i];
+      if (mat->h_rows[i] > max_nnz_per_row)
+        max_nnz_per_row = mat->h_rows[i];
 
     /* transform the row counts to row offsets */
-    thrust::exclusive_scan(mat->rows, mat->rows + m + 1, mat->rows);
+    thrust::exclusive_scan(mat->h_rows, mat->h_rows + m + 1, mat->h_rows);
+
+    mat->update_device();
     
     delete indx;
     return max_nnz_per_row;
