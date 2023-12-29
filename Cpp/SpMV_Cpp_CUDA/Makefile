@@ -18,7 +18,7 @@ OBJ_CU:=$(patsubst %.cu, %.o, $(SRC_CU))
 
 ALL_OBJ:=$(OBJ_CC) $(OBJ_CU)
 
-DATA="data/RM07R.mtx"
+DATA="data/CurlCurl_4.mtx"
 
 %.o: %.c
 	$(CC) $(CFLAGS) -c $< -o $@
@@ -39,6 +39,12 @@ debug: all
 
 prof: all
 	nsys profile -t cuda,cublas,nvtx -s none --stats true ./$(EXE) $(DATA)
+
+ncu-shared: all
+	ncu --set full --kernel-name sparse_mvm_shared --launch-skip 3 --launch-count 1 -f -o shared-32 "./$(EXE)" $(DATA)
+
+ncu: all
+	ncu --set full --kernel-name sparse_mvm --launch-skip 3 --launch-count 1 -f -o noshared-32 "./$(EXE)" $(DATA)
 
 clean:
 	rm -f *.o $(EXE)
