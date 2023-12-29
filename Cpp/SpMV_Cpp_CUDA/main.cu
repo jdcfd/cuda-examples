@@ -66,30 +66,53 @@ __global__ void sparse_mvm(int * rows, int * cols, double * vals, double * vec, 
 
 
 template <int block_size>
+__device__ void warpReduce(volatile double *sdata, unsigned int tid) {
+    if (block_size >= 64) sdata[tid] += sdata[tid + 32];
+    if (block_size >= 32) sdata[tid] += sdata[tid + 16];
+    if (block_size >= 16) sdata[tid] += sdata[tid + 8];
+    if (block_size >= 8) sdata[tid] += sdata[tid + 4];
+    if (block_size >= 4) sdata[tid] += sdata[tid + 2];
+    if (block_size >= 2) sdata[tid] += sdata[tid + 1];
+}
+
+template <int block_size>
 __global__ void sparse_mvm_shared(int * rows, int * cols, double * vals, double * vec, double * res, int nrows, int ncols)
 {
      // Block index
     int row = threadIdx.y + blockDim.y*blockIdx.x;
     extern __shared__ double sum[];
+    unsigned int tid = threadIdx.x;
 
     if(row < nrows){
         int start {rows[row]};
         int end {rows[row+1]}; 
-        sum[threadIdx.y*(block_size) + threadIdx.x] = 0.0;
+        
+        sum[threadIdx.y*(block_size) + tid] = 0.0;
 
-        for(int icol = threadIdx.x + start; icol < end; icol += block_size ){
-            sum[threadIdx.y*(block_size) + threadIdx.x] += vals[icol] * vec[cols[icol]];
+        for(int icol = tid + start; icol < end; icol += block_size ){
+            sum[threadIdx.y*(block_size) + tid] += vals[icol] * vec[cols[icol]];
         }
-
         __syncthreads();
 
-        #pragma unroll
-        for (int i = block_size >> 1; i > 0; i >>= 1){
-            if(threadIdx.x < i) sum[threadIdx.y*(block_size) + threadIdx.x] += sum[threadIdx.y*(block_size) + threadIdx.x + i];
-            __syncthreads();
-        }
+        // #pragma unroll
+        // for (int i = block_size >> 1; i > 0; i >>= 1){
+        //     if(tid < i) sum[threadIdx.y*(block_size) + tid] += sum[threadIdx.y*(block_size) + tid + i];
+        //     __syncthreads();
+        // }
 
-        if(!threadIdx.x){ res[row] = sum[threadIdx.y*(block_size) + threadIdx.x]; } // write only with first thread        
+        if (block_size >= 512) { if (tid < 256) { 
+            sum[threadIdx.y*(block_size) + tid] += sum[threadIdx.y*(block_size) + tid + 256]; } 
+            __syncthreads(); }
+        if (block_size >= 256) { if (tid < 128) { 
+            sum[threadIdx.y*(block_size) + tid] += sum[threadIdx.y*(block_size) + tid + 128]; } 
+            __syncthreads(); }
+        if (block_size >= 128) { if (tid < 64) { 
+            sum[threadIdx.y*(block_size) + tid] += sum[threadIdx.y*(block_size) + tid + 64]; } 
+            __syncthreads(); }
+
+        if (tid < 32) warpReduce<block_size>(&(sum[threadIdx.y*(block_size)]), tid);
+
+        if(!tid){ res[row] = sum[threadIdx.y*(block_size) + tid]; } // write only with first thread        
     }
 }
 
@@ -165,7 +188,11 @@ void run_test(int block_size, CSRMatrix *mymat, DenseVector *X, DenseVector *Y, 
         }
         break;
     case 4:
-        TIME_KERNEL((sparse_mvm<4><<<blocks,threads>>>(mymat->d_rows, mymat->d_cols, mymat->d_values,X->d_val, Y->d_val, mymat->nrows, mymat->ncols)))
+        if(shared){
+            TIME_KERNEL((sparse_mvm_shared<4><<<blocks,threads,shms>>>(mymat->d_rows, mymat->d_cols, mymat->d_values,X->d_val, Y->d_val, mymat->nrows, mymat->ncols)))
+        }else{
+            TIME_KERNEL((sparse_mvm<4><<<blocks,threads>>>(mymat->d_rows, mymat->d_cols, mymat->d_values,X->d_val, Y->d_val, mymat->nrows, mymat->ncols)))
+        }
         break;
     case 2:
         TIME_KERNEL((sparse_mvm<2><<<blocks,threads>>>(mymat->d_rows, mymat->d_cols, mymat->d_values,X->d_val, Y->d_val, mymat->nrows, mymat->ncols)))
@@ -262,12 +289,15 @@ int main(int argc, char const *argv[]) {
 
     checkCudaErrors(cudaDeviceSetSharedMemConfig ( cudaSharedMemBankSizeEightByte ));
 
-    for( int bs = 128; bs > 2; bs >>= 1){
+    for( int bs = 4; bs <= 32; bs *= 2){
         if(true){
-            run_test(bs,mymat,&X,&Y,mnnzpr); 
+            // reset Y
+            Y.fill(0.0);
+            run_test(bs,mymat,&X,&Y,mnnzpr,false); 
             Y.update_host(); // only comparing results from last test
             compare_values(&Y, &Ycsp);
 
+            Y.fill(0.0);
             run_test(bs,mymat,&X,&Y,mnnzpr,true); 
             Y.update_host(); // only comparing results from last test
             compare_values(&Y, &Ycsp);
