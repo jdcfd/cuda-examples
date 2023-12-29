@@ -71,24 +71,25 @@ __global__ void sparse_mvm_shared(int * rows, int * cols, double * vals, double 
      // Block index
     int row = threadIdx.y + blockDim.y*blockIdx.x;
     extern __shared__ double sum[];
+
     if(row < nrows){
         int start {rows[row]};
         int end {rows[row+1]}; 
-        sum[block_size*threadIdx.y + threadIdx.x] = 0.0;
+        sum[threadIdx.y*(block_size) + threadIdx.x] = 0.0;
 
         for(int icol = threadIdx.x + start; icol < end; icol += block_size ){
-            sum[block_size*threadIdx.y + threadIdx.x] += vals[icol] * vec[cols[icol]];
+            sum[threadIdx.y*(block_size) + threadIdx.x] += vals[icol] * vec[cols[icol]];
         }
+
         __syncthreads();
 
-        // Need to use templated block size to unroll loop
-#pragma unroll
+        #pragma unroll
         for (int i = block_size >> 1; i > 0; i >>= 1){
-            if(threadIdx.x < i) sum[block_size*threadIdx.y + threadIdx.x] += sum[block_size*threadIdx.y + threadIdx.x + i];
+            if(threadIdx.x < i) sum[threadIdx.y*(block_size) + threadIdx.x] += sum[threadIdx.y*(block_size) + threadIdx.x + i];
             __syncthreads();
         }
 
-        if(!threadIdx.x){ res[row] = sum[block_size*threadIdx.y + threadIdx.x]; } // write only with first thread        
+        if(!threadIdx.x){ res[row] = sum[threadIdx.y*(block_size) + threadIdx.x]; } // write only with first thread        
     }
 }
 
@@ -122,7 +123,7 @@ void run_test(int block_size, CSRMatrix *mymat, DenseVector *X, DenseVector *Y, 
     
     dim3 blocks(num_blocks, 1, 1);
     dim3 threads(block_size, rows_per_block, 1);
-    size_t shms = 1024*sizeof(double);
+    size_t shms = rows_per_block*(block_size)*sizeof(double);
 
     cout << "Running test with block_size=" << block_size << " and shared=" << (shared ? "true" : "false") << endl;
 
@@ -258,6 +259,8 @@ int main(int argc, char const *argv[]) {
     }
 
     Ycsp.update_host();
+
+    checkCudaErrors(cudaDeviceSetSharedMemConfig ( cudaSharedMemBankSizeEightByte ));
 
     for( int bs = 128; bs > 2; bs >>= 1){
         if(true){
