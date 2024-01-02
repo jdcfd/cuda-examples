@@ -2,10 +2,10 @@ CC:=nvc
 CXX:=nvc++
 CUC:=nvcc
 
-OPT:= -O3
+OPT:= -O3 
 
 CFLAGS:= $(OPT) -fPIE
-CUFLAGS:= $(OPT) --use_fast_math -arch=compute_86 -I../Common
+CUFLAGS:= $(OPT) --use_fast_math -lineinfo -arch=compute_86 -I../Common
 CXXFLAGS:= $(OPT)
 
 EXE:=spmv
@@ -18,7 +18,7 @@ OBJ_CU:=$(patsubst %.cu, %.o, $(SRC_CU))
 
 ALL_OBJ:=$(OBJ_CC) $(OBJ_CU)
 
-DATA="data/CurlCurl_4.mtx"
+DATA="data/RM07R.mtx"
 
 %.o: %.c
 	$(CC) $(CFLAGS) -c $< -o $@
@@ -27,7 +27,7 @@ DATA="data/CurlCurl_4.mtx"
 	$(CUC) $(CUFLAGS) -c $< -o $@
 
 $(EXE): $(ALL_OBJ)
-	$(CXX) $(CXXFLAGS) -cuda -gpu=cc86,cuda11.8 -cudalib=cusparse -o $(EXE) $(ALL_OBJ)
+	$(CXX) $(CXXFLAGS) -cuda -gpu=cc86,cuda11.8,lineinfo -cudalib=cusparse -o $(EXE) $(ALL_OBJ)
 
 all: $(EXE)
 
