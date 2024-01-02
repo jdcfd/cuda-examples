@@ -86,10 +86,12 @@ __global__ void sparse_mvm_shared(int * rows, int * cols, double * vals, double 
     if(row < nrows){
         int start {rows[row]};
         int end {rows[row+1]}; 
+        int icol = tid + start;
         
-        sum[threadIdx.y*(block_size) + tid] = 0.0;
+        if(icol < end){sum[threadIdx.y*(block_size) + tid] = vals[icol] * vec[cols[icol]];}
+        else{ sum[threadIdx.y*(block_size) + tid] = 0.0; }
 
-        for(int icol = tid + start; icol < end; icol += block_size ){
+        for( icol = icol + block_size; icol < end; icol+= block_size ){
             sum[threadIdx.y*(block_size) + tid] += vals[icol] * vec[cols[icol]];
         }
         __syncthreads();
@@ -121,7 +123,7 @@ void compare_values(DenseVector *Y, DenseVector *Yref)
     bool issame {true};
 
     for( int i {}; i < Y->size; i++ ){
-        issame *= ( fabs(Y->h_val[i] - Yref->h_val[i]) < EPS );
+        issame *= ( fabs(Y->h_val[i] - Yref->h_val[i]) < EPS*fabs(Yref->h_val[i]) );
     }
 
     if(issame){
@@ -141,7 +143,7 @@ void compare_values(DenseVector *Y, DenseVector *Yref)
 void run_test(int block_size, CSRMatrix *mymat, DenseVector *X, DenseVector *Y, int mnnzpr, bool shared = false){
     // limit the number of threads per row to be no larger than the warp size
 
-    int rows_per_block = 1024 / block_size;
+    int rows_per_block = 256 / block_size;
     int num_blocks = (mymat->nrows + rows_per_block - 1) / rows_per_block;
     
     dim3 blocks(num_blocks, 1, 1);
@@ -256,6 +258,7 @@ int main(int argc, char const *argv[]) {
         size_t               bufferSize = 0;
         double alpha = 1.0;
         double beta  = 0.0;
+
         CHECK_CUSPARSE( cusparseCreate(&handle) )
         // Create sparse matrix A in CSR format
         CHECK_CUSPARSE( cusparseCreateCsr(&matA, mymat->nrows, mymat->ncols, mymat->nnz,
@@ -266,17 +269,25 @@ int main(int argc, char const *argv[]) {
         CHECK_CUSPARSE( cusparseCreateDnVec(&vecX, mymat->ncols, X.d_val, CUDA_R_64F) )
         // Create dense vector y
         CHECK_CUSPARSE( cusparseCreateDnVec(&vecY, mymat->nrows, Ycsp.d_val, CUDA_R_64F) )
-        // allocate an external buffer if needed
+        
+        // allocate an external buffer if needed      
         CHECK_CUSPARSE( cusparseSpMV_bufferSize(
                                      handle, CUSPARSE_OPERATION_NON_TRANSPOSE,
                                      &alpha, matA, vecX, &beta, vecY, CUDA_R_64F,
                                      CUSPARSE_SPMV_ALG_DEFAULT, &bufferSize) )
+        
+        cout << "Buffer size: " << bufferSize << endl; 
         checkCudaErrors( cudaMalloc(&dBuffer, bufferSize) );
 
-        // execute SpMV
+        // execute SpMV      
+        auto t0 = std::chrono::high_resolution_clock::now();    
         CHECK_CUSPARSE( cusparseSpMV(handle, CUSPARSE_OPERATION_NON_TRANSPOSE,
                                      &alpha, matA, vecX, &beta, vecY, CUDA_R_64F,
                                      CUSPARSE_SPMV_ALG_DEFAULT, dBuffer) )
+        auto t1 = std::chrono::high_resolution_clock::now();
+        
+        auto timing = chrono::duration_cast<chrono::nanoseconds>(t1 - t0).count() * 1.e-6; \
+        cout << endl << "-- cusparseSpMV duration: " <<  timing << " ms" << endl << endl;
 
         // destroy matrix/vector descriptors
         CHECK_CUSPARSE( cusparseDestroySpMat(matA) )
@@ -289,7 +300,7 @@ int main(int argc, char const *argv[]) {
 
     checkCudaErrors(cudaDeviceSetSharedMemConfig ( cudaSharedMemBankSizeEightByte ));
 
-    for( int bs = 4; bs <= 32; bs *= 2){
+    for( int bs = 4; bs < avgnnzpr; bs *= 2){
         if(true){
             // reset Y
             Y.fill(0.0);
