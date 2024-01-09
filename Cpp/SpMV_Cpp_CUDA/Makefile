@@ -18,7 +18,7 @@ OBJ_CU:=$(patsubst %.cu, %.o, $(SRC_CU))
 
 ALL_OBJ:=$(OBJ_CC) $(OBJ_CU)
 
-DATA="data/RM07R.mtx"
+DATA="data/dielFilterV3real.mtx"
 
 %.o: %.c
 	$(CC) $(CFLAGS) -c $< -o $@

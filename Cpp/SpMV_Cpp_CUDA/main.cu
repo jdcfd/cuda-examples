@@ -87,12 +87,19 @@ __global__ void sparse_mvm_shared(int * rows, int * cols, double * vals, double 
         int start {rows[row]};
         int end {rows[row+1]}; 
         int icol = tid + start;
-        
-        if(icol < end){sum[threadIdx.y*(block_size) + tid] = vals[icol] * vec[cols[icol]];}
-        else{ sum[threadIdx.y*(block_size) + tid] = 0.0; }
 
+        // if(icol < end){sum[threadIdx.y*(block_size) + tid] = vals[icol] * vec[cols[icol]];}
+        // else{ sum[threadIdx.y*(block_size) + tid] = 0.0; }
+        double vcval = vec[cols[icol]];
+
+        sum[threadIdx.y*(block_size) + tid] = (icol < end) ? vals[icol] * vcval : 0.0;
+
+        // sum[threadIdx.y*(block_size) + tid] = 0.0;
+
+        // for( int icol = start + tid; icol < end; icol+= block_size ){
         for( icol = icol + block_size; icol < end; icol+= block_size ){
-            sum[threadIdx.y*(block_size) + tid] += vals[icol] * vec[cols[icol]];
+            vcval = vec[cols[icol]];  
+            sum[threadIdx.y*(block_size) + tid] += vals[icol] * vcval;
         }
         __syncthreads();
 
@@ -248,6 +255,8 @@ int main(int argc, char const *argv[]) {
 
     DenseVector Ycsp(mymat->ncols); // Initialize with zeros
 
+    // checkCudaErrors(cudaDeviceSetSharedMemConfig ( cudaSharedMemBankSizeEightByte ));
+
     // Use cuSparse
     // CUSPARSE APIs
     {
@@ -284,6 +293,7 @@ int main(int argc, char const *argv[]) {
         CHECK_CUSPARSE( cusparseSpMV(handle, CUSPARSE_OPERATION_NON_TRANSPOSE,
                                      &alpha, matA, vecX, &beta, vecY, CUDA_R_64F,
                                      CUSPARSE_SPMV_ALG_DEFAULT, dBuffer) )
+        cudaDeviceSynchronize();
         auto t1 = std::chrono::high_resolution_clock::now();
         
         auto timing = chrono::duration_cast<chrono::nanoseconds>(t1 - t0).count() * 1.e-6; \
@@ -298,9 +308,9 @@ int main(int argc, char const *argv[]) {
 
     Ycsp.update_host();
 
-    checkCudaErrors(cudaDeviceSetSharedMemConfig ( cudaSharedMemBankSizeEightByte ));
+    int lim = (avgnnzpr < 32) ? avgnnzpr : 32;
 
-    for( int bs = 4; bs < avgnnzpr; bs *= 2){
+    for( int bs = 4; bs < lim; bs *= 2){
         if(true){
             // reset Y
             Y.fill(0.0);
