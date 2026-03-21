@@ -1,5 +1,5 @@
 #include <matrix_csr.cuh>
-#include <mmio_reader.cuh>
+#include "mmio_reader.cuh"
 #include <thrust/sort.h>
 
 CSRMatrixReader::CSRMatrixReader(string filename){
@@ -29,6 +29,7 @@ int CSRMatrixReader::mm_init_csr(CSRMatrix **mat){
     ierr = mm_read_mtx_crd_size(this->f, &nrows, &ncols, &nnz);
 
     this->nnz = nnz;
+	    this->symm = false;
 
     if( mm_is_symmetric(this->mmtc) ){
         nnz = nnz * 2 - nrows; // Assumes diagonals are non-zero

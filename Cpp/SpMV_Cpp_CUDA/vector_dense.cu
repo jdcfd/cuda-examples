@@ -2,7 +2,7 @@
 #include <thrust/device_ptr.h>
 #include <thrust/random.h>
 #include <thrust/copy.h>
-#include <vector_dense.cuh>
+#include "vector_dense.cuh"
 
 DenseVector::DenseVector(int n){
     this->size = n;

@@ -5,7 +5,7 @@ CUC:=nvcc
 OPT:= -O3 
 
 CFLAGS:= $(OPT) -fPIE
-CUFLAGS:= $(OPT) --use_fast_math -lineinfo -arch=compute_86 -I../Common
+CUFLAGS:= $(OPT) --use_fast_math -lineinfo -arch=compute_86 -I. -I/opt/nvidia/hpc_sdk/Linux_x86_64/25.11/examples/OpenACC/SDK/include
 CXXFLAGS:= $(OPT)
 
 EXE:=spmv
@@ -27,7 +27,7 @@ DATA="data/dielFilterV3real.mtx"
 	$(CUC) $(CUFLAGS) -c $< -o $@
 
 $(EXE): $(ALL_OBJ)
-	$(CXX) $(CXXFLAGS) -cuda -gpu=cc86,cuda11.8,lineinfo -cudalib=cusparse -o $(EXE) $(ALL_OBJ)
+	$(CXX) $(CXXFLAGS) -cuda -gpu=cc86,lineinfo -cudalib=cusparse -o $(EXE) $(ALL_OBJ)
 
 all: $(EXE)
 

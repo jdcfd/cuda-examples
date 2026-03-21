@@ -9,22 +9,26 @@ it by a dense vector with random values.
 
 */
 #include <helper_cuda.h>
-#include <matrix.hpp>
-#include <matrix_csr.cuh>
-#include <mmio_reader.cuh>
-#include <vector_dense.cuh>
+#include "matrix.hpp"
+#include "matrix_csr.cuh"
+#include "mmio_reader.cuh"
+#include "vector_dense.cuh"
 #include <cusparse.h> 
 
 #include <chrono>
 
 #define TIME_KERNEL(func)                                                   \
 {                                                                           \
-    auto t0 = std::chrono::high_resolution_clock::now();                    \
-    (func);                                         \
-    cudaDeviceSynchronize();                                                \
-    auto t1 = std::chrono::high_resolution_clock::now();                    \
-    auto timing = chrono::duration_cast<chrono::nanoseconds>(t1 - t0).count() * 1.e-6; \
-    std::cout << "-- Kernel duration: " <<  timing << " ms" << std::endl; \
+    const int NRUNS = 10;                                                   \
+    double total = 0.0;                                                     \
+    for(int irun = 0; irun < NRUNS; irun++) {                              \
+        auto t0 = std::chrono::high_resolution_clock::now();                \
+        (func);                                                             \
+        cudaDeviceSynchronize();                                            \
+        auto t1 = std::chrono::high_resolution_clock::now();                \
+        total += std::chrono::duration_cast<std::chrono::nanoseconds>(t1 - t0).count() * 1.e-6; \
+    }                                                                       \
+    std::cout << "-- Kernel duration (avg of " << NRUNS << " runs): " << (total / NRUNS) << " ms" << std::endl; \
 }
 
 #define EPS 1e-08
@@ -130,7 +134,7 @@ void compare_values(DenseVector *Y, DenseVector *Yref)
     bool issame {true};
 
     for( int i {}; i < Y->size; i++ ){
-        issame *= ( fabs(Y->h_val[i] - Yref->h_val[i]) < EPS*fabs(Yref->h_val[i]) );
+        issame *= ( fabs(Y->h_val[i] - Yref->h_val[i]) < EPS );
     }
 
     if(issame){
@@ -215,7 +219,7 @@ void run_test(int block_size, CSRMatrix *mymat, DenseVector *X, DenseVector *Y, 
 int main(int argc, char const *argv[]) {
 
     if( argc < 2 ){
-        cout << "Usage: ./vector_csr <matrix market file>" << endl;
+        cout << "Usage: ./spmv <matrix market file>" << endl;
         return -1;
     }
 
@@ -288,16 +292,26 @@ int main(int argc, char const *argv[]) {
         cout << "Buffer size: " << bufferSize << endl; 
         checkCudaErrors( cudaMalloc(&dBuffer, bufferSize) );
 
-        // execute SpMV      
-        auto t0 = std::chrono::high_resolution_clock::now();    
+        // warmup run of the cusparseSpMV call (excluded from timing)
         CHECK_CUSPARSE( cusparseSpMV(handle, CUSPARSE_OPERATION_NON_TRANSPOSE,
                                      &alpha, matA, vecX, &beta, vecY, CUDA_R_64F,
                                      CUSPARSE_SPMV_ALG_DEFAULT, dBuffer) )
         cudaDeviceSynchronize();
-        auto t1 = std::chrono::high_resolution_clock::now();
+
+        // averaged cusparseSpMV call over 10 runs
+        const int NRUNS = 10;
+        double total = 0.0;
+        for(int irun = 0; irun < NRUNS; irun++) {    
+            auto t0 = std::chrono::high_resolution_clock::now();    
+            CHECK_CUSPARSE( cusparseSpMV(handle, CUSPARSE_OPERATION_NON_TRANSPOSE,
+                                         &alpha, matA, vecX, &beta, vecY, CUDA_R_64F,
+                                         CUSPARSE_SPMV_ALG_DEFAULT, dBuffer) )
+            cudaDeviceSynchronize();
+            auto t1 = std::chrono::high_resolution_clock::now();
+            total += std::chrono::duration_cast<std::chrono::nanoseconds>(t1 - t0).count() * 1.e-6;
+        }
         
-        auto timing = chrono::duration_cast<chrono::nanoseconds>(t1 - t0).count() * 1.e-6; \
-        cout << endl << "-- cusparseSpMV duration: " <<  timing << " ms" << endl << endl;
+        cout << endl << "-- cusparseSpMV duration (avg of " << NRUNS << " runs): " << (total / NRUNS) << " ms" << endl << endl;
 
         // destroy matrix/vector descriptors
         CHECK_CUSPARSE( cusparseDestroySpMat(matA) )
@@ -308,7 +322,7 @@ int main(int argc, char const *argv[]) {
 
     Ycsp.update_host();
 
-    int lim = (avgnnzpr < 32) ? avgnnzpr : 32;
+    int lim = 32;
 
     for( int bs = 4; bs < lim; bs *= 2){
         if(true){
