@@ -13,6 +13,7 @@ it by a dense vector with random values.
 #include "matrix_csr.cuh"
 #include "mmio_reader.cuh"
 #include "vector_dense.cuh"
+#include "kernels.cuh"
 #include <cusparse.h> 
 
 #include <chrono>
@@ -45,96 +46,13 @@ it by a dense vector with random values.
 
 using namespace std;
 
-template <int block_size>
-__global__ void sparse_mvm(int * rows, int * cols, double * vals, double * vec, double * res, int nrows, int ncols)
-{
-    // Block index
-    int row = threadIdx.y + blockDim.y*blockIdx.x;
-    if(row < nrows){
-        int start {rows[row]};
-        int end {rows[row+1]}; 
-        double sum = 0.0;
-
-        for(int icol = threadIdx.x + start; icol < end; icol += block_size ){
-            sum += vals[icol] * vec[cols[icol]];
-        }
-
-        // Need to use templated block size to unroll loop
-#pragma unroll
-        for (int i = block_size >> 1; i > 0; i >>= 1)
-            sum += __shfl_down_sync(0xffffffff,sum, i, i*2);
-
-        if(!threadIdx.x){ res[row] = sum; } // write only with first thread        
-    }
-}
-
-
-template <int block_size>
-__device__ void warpReduce(volatile double *sdata, unsigned int tid) {
-    if (block_size >= 64) sdata[tid] += sdata[tid + 32];
-    if (block_size >= 32) sdata[tid] += sdata[tid + 16];
-    if (block_size >= 16) sdata[tid] += sdata[tid + 8];
-    if (block_size >= 8) sdata[tid] += sdata[tid + 4];
-    if (block_size >= 4) sdata[tid] += sdata[tid + 2];
-    if (block_size >= 2) sdata[tid] += sdata[tid + 1];
-}
-
-template <int block_size>
-__global__ void sparse_mvm_shared(int * rows, int * cols, double * vals, double * vec, double * res, int nrows, int ncols)
-{
-     // Block index
-    int row = threadIdx.y + blockDim.y*blockIdx.x;
-    extern __shared__ double sum[];
-    unsigned int tid = threadIdx.x;
-
-    if(row < nrows){
-        int start {rows[row]};
-        int end {rows[row+1]}; 
-        int icol = tid + start;
-
-        // if(icol < end){sum[threadIdx.y*(block_size) + tid] = vals[icol] * vec[cols[icol]];}
-        // else{ sum[threadIdx.y*(block_size) + tid] = 0.0; }
-        double vcval = vec[cols[icol]];
-
-        sum[threadIdx.y*(block_size) + tid] = (icol < end) ? vals[icol] * vcval : 0.0;
-
-        // sum[threadIdx.y*(block_size) + tid] = 0.0;
-
-        // for( int icol = start + tid; icol < end; icol+= block_size ){
-        for( icol = icol + block_size; icol < end; icol+= block_size ){
-            vcval = vec[cols[icol]];  
-            sum[threadIdx.y*(block_size) + tid] += vals[icol] * vcval;
-        }
-        __syncthreads();
-
-        // #pragma unroll
-        // for (int i = block_size >> 1; i > 0; i >>= 1){
-        //     if(tid < i) sum[threadIdx.y*(block_size) + tid] += sum[threadIdx.y*(block_size) + tid + i];
-        //     __syncthreads();
-        // }
-
-        if (block_size >= 512) { if (tid < 256) { 
-            sum[threadIdx.y*(block_size) + tid] += sum[threadIdx.y*(block_size) + tid + 256]; } 
-            __syncthreads(); }
-        if (block_size >= 256) { if (tid < 128) { 
-            sum[threadIdx.y*(block_size) + tid] += sum[threadIdx.y*(block_size) + tid + 128]; } 
-            __syncthreads(); }
-        if (block_size >= 128) { if (tid < 64) { 
-            sum[threadIdx.y*(block_size) + tid] += sum[threadIdx.y*(block_size) + tid + 64]; } 
-            __syncthreads(); }
-
-        if (tid < 32) warpReduce<block_size>(&(sum[threadIdx.y*(block_size)]), tid);
-
-        if(!tid){ res[row] = sum[threadIdx.y*(block_size) + tid]; } // write only with first thread        
-    }
-}
-
 void compare_values(DenseVector *Y, DenseVector *Yref)
 {
     bool issame {true};
 
     for( int i {}; i < Y->size; i++ ){
-        issame *= ( fabs(Y->h_val[i] - Yref->h_val[i]) < EPS );
+        double error = fabs(Y->h_val[i] - Yref->h_val[i]);
+        issame = issame && ((error < fabs(EPS*Yref->h_val[i])) ? true : (printf("|%e[%d] - %e[%d]| = %e\n",Y->h_val[i],i,Yref->h_val[i],i,error), false));
     }
 
     if(issame){
@@ -151,7 +69,7 @@ void compare_values(DenseVector *Y, DenseVector *Yref)
     }
 }
 
-void run_test(int block_size, CSRMatrix *mymat, DenseVector *X, DenseVector *Y, int mnnzpr, bool shared = false){
+void run_test(int block_size, std::unique_ptr<CSRMatrix>& mymat, DenseVector *X, DenseVector *Y, int mnnzpr, bool shared = false){
     // limit the number of threads per row to be no larger than the warp size
 
     int rows_per_block = 256 / block_size;
@@ -229,11 +147,11 @@ int main(int argc, char const *argv[]) {
 
     // int ntrials {atoi(argv[2])};
 
-    CSRMatrix *mymat {}; 
+    std::unique_ptr<CSRMatrix> mymat {}; 
 
     CSRMatrixReader reader(filename);
 
-    ierr = reader.mm_init_csr(&mymat); // allocate memory
+    ierr = reader.mm_init_csr(mymat); // allocate memory
 
     if(ierr){
         cout << "Error" << ierr << endl;
@@ -339,10 +257,6 @@ int main(int argc, char const *argv[]) {
             cout << endl;
         }
     }
-
-    delete mymat; // Calls destroyer
-
-    mymat = nullptr; 
 
     return ierr;
 }

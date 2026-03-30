@@ -11,7 +11,7 @@ CSRMatrixReader::~CSRMatrixReader(){
     fclose(this->f);
 }
 
-int CSRMatrixReader::mm_init_csr(CSRMatrix **mat){
+int CSRMatrixReader::mm_init_csr(std::unique_ptr<CSRMatrix>& mat){
     int ierr;
     ierr = mm_read_banner(this->f,&(this->mmtc));
     if(ierr){
@@ -40,8 +40,8 @@ int CSRMatrixReader::mm_init_csr(CSRMatrix **mat){
         return ierr;
     }
 
-    if(*mat == nullptr){
-        *mat = new CSRMatrix(nrows, ncols, nnz);
+    if(!mat){
+        mat = std::make_unique<CSRMatrix>(nrows, ncols, nnz);
     }
     else{
         cout << "Matrix is not empty!" << endl;
@@ -51,7 +51,7 @@ int CSRMatrixReader::mm_init_csr(CSRMatrix **mat){
     return ierr;
 }
 
-int CSRMatrixReader::mm_read_csr(CSRMatrix *mat){
+int CSRMatrixReader::mm_read_csr(std::unique_ptr<CSRMatrix>& mat){
     
     int *indx = new int[mat->nnz]; // Temporary rows array
     int ierr {};

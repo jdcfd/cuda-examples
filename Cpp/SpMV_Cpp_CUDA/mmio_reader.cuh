@@ -1,5 +1,6 @@
 #include <iostream>
 #include "stdio.h"
+#include <memory>
 extern "C"{
     #include "mmio.h"
 }
@@ -14,6 +15,6 @@ class CSRMatrixReader {
     string filename;
     CSRMatrixReader(string filename);
     ~CSRMatrixReader();
-    int mm_init_csr(CSRMatrix** mat);
-    int mm_read_csr(CSRMatrix* mat);
+    int mm_init_csr(std::unique_ptr<CSRMatrix>& mat);
+    int mm_read_csr(std::unique_ptr<CSRMatrix>& mat);
 };

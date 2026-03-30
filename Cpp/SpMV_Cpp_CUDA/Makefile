@@ -5,7 +5,7 @@ CUC:=nvcc
 OPT:= -O3 
 
 CFLAGS:= $(OPT) -fPIE
-CUFLAGS:= $(OPT) --use_fast_math -lineinfo -arch=compute_86 -I. -I/opt/nvidia/hpc_sdk/Linux_x86_64/25.11/examples/OpenACC/SDK/include
+CUFLAGS:= $(OPT) --use_fast_math -lineinfo -arch=compute_86 -I. -I/opt/nvidia/hpc_sdk/Linux_x86_64/25.11/examples/OpenACC/SDK/include -rdc=true
 CXXFLAGS:= $(OPT)
 
 EXE:=spmv
@@ -13,7 +13,7 @@ EXE:=spmv
 SRC_CC:=mmio.c
 OBJ_CC:=$(patsubst %.c, %.o, $(SRC_CC))
 
-SRC_CU:=matrix_csr.cu mmio_reader.cu vector_dense.cu main.cu 
+SRC_CU:=matrix_csr.cu mmio_reader.cu vector_dense.cu kernels.cu main.cu 
 OBJ_CU:=$(patsubst %.cu, %.o, $(SRC_CU))
 
 ALL_OBJ:=$(OBJ_CC) $(OBJ_CU)
