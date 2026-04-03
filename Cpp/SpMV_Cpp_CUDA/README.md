@@ -3,6 +3,8 @@ High-performance CSR Sparse Matrix - Dense Vector multiplication (SpMV) in CUDA.
 
 This library is a cleaned-up and refactored version of an implementation originally inspired by the [AMD Lab Notes SpMV blog post](https://gpuopen.com/learn/amd-lab-notes/amd-lab-notes-spmv-docs-spmv_part1/). It is competitive with (and in some cases faster than) `cuSPARSE`'s `cusparseSpMV`.
 
+**Project Roadmap**: This module is serving as the foundation for an upcoming production-quality, GPU-accelerated Finite Element Method (FEM) linear solver.
+
 ## Features
 
 - Clean, reusable C++ library under the `sparse` namespace
