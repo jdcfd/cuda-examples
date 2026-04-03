@@ -4,6 +4,7 @@
 #include "sparse/spmv.cuh"
 #include "../include/cg.cuh"
 
+#include <algorithm>
 #include <iostream>
 #include <memory>
 #include <cmath>
@@ -23,11 +24,16 @@ void compare(const sparse::DenseVector& x, const sparse::DenseVector& x_true) {
 
 int main(int argc, char** argv) {
     if (argc < 2) {
-        std::cout << "Usage: ./cg_benchmark <matrix market file>\n";
+        std::cout << "Usage: ./cg_benchmark <matrix market file> [rhs vector file] [reference text file]\n";
         return -1;
     }
 
     std::string filename = argv[1];
+    bool has_b_file = (argc >= 3);
+    std::string b_filename = has_b_file ? argv[2] : "";
+    bool has_ref_file = (argc >= 4);
+    std::string ref_filename = has_ref_file ? argv[3] : "";
+
     std::unique_ptr<sparse::CSRMatrix> mymat;
 
     CSRMatrixReader reader(filename);
@@ -46,17 +52,72 @@ int main(int argc, char** argv) {
     }
 
     int n = mymat->nrows;
-
-    // Create ground truth x (x_true)
     sparse::DenseVector x_true(n);
-    for (int i = 0; i < n; ++i) {
-        x_true.h_val[i] = 1.0;
-    }
-    x_true.update_device();
-
-    // Create b = A * x_true
     sparse::DenseVector b(n);
-    sparse::multiply(*mymat, x_true, b, 32);
+
+    if (has_b_file) {
+        FILE *f = fopen(b_filename.c_str(), "r");
+        if (f == NULL) {
+            std::cout << "Could not open b file\n";
+            return -1;
+        }
+        MM_typecode matcode;
+        if (mm_read_banner(f, &matcode) != 0) {
+            std::cout << "Could not process Matrix Market banner.\n";
+            return -1;
+        }
+        if (!mm_is_array(matcode)) {
+            std::cout << "b must be an array.\n";
+            return -1;
+        }
+        int M, N;
+        if (mm_read_mtx_array_size(f, &M, &N) != 0) {
+            return -1;
+        }
+        if (M != n) {
+            std::cout << "b dimension mismatch.\n";
+            return -1;
+        }
+        for (int i = 0; i < M; i++) {
+            double val;
+            if (fscanf(f, "%lf", &val) != 1) {
+                std::cout << "Error reading value\n";
+                return -1;
+            }
+            b.h_val[i] = val;
+        }
+        fclose(f);
+        b.update_device();
+    } else {
+        // Create ground truth x (x_true)
+        for (int i = 0; i < n; ++i) {
+            x_true.h_val[i] = 1.0;
+        }
+        x_true.update_device();
+
+        // Create b = A * x_true
+        sparse::multiply(*mymat, x_true, b, 32);
+    }
+
+    sparse::DenseVector x_ref(n);
+    if (has_ref_file) {
+        FILE *f = fopen(ref_filename.c_str(), "r");
+        if (f == NULL) {
+            std::cout << "Could not open reference file\n";
+            return -1;
+        }
+        for (int i = 0; i < n; ++i) {
+            double val;
+            if (fscanf(f, "%lf", &val) != 1) {
+                std::cout << "Error reading reference value\n";
+                return -1;
+            }
+            x_ref.h_val[i] = val;
+        }
+        fclose(f);
+        // host-only needed for comparison, but good practice
+        x_ref.update_device();
+    }
 
     // Initial guess x0 = 0
     sparse::DenseVector x(n);
@@ -82,7 +143,18 @@ int main(int argc, char** argv) {
         std::cout << "CG Failed to converge within max iterations.\n";
     }
 
-    compare(x, x_true);
+    if (has_ref_file) {
+        compare(x, x_ref);
+    } else if (has_b_file) {
+        x.update_host(); // ensure host is up to date
+        std::cout << "Solution vector (first 10 elements):\n";
+        for (int i = 0; i < std::min(10, n); ++i) {
+            std::cout << x.h_val[i] << " ";
+        }
+        std::cout << "\n";
+    } else {
+        compare(x, x_true);
+    }
 
     return 0;
 }

@@ -36,7 +36,7 @@ set_target_properties(cg PROPERTIES
 add_executable(cg_benchmark
     examples/main.cu
     # Re-use the MTX reader from SpMV
-    ${CMAKE_CURRENT_SOURCE_DIR}/../SpMV_Cpp_CUDA/examples/benchmark/mmio_reader.cu
+    ${CMAKE_CURRENT_SOURCE_DIR}/../SpMV_Cpp_CUDA/src/mmio_reader.cu
     ${CMAKE_CURRENT_SOURCE_DIR}/../SpMV_Cpp_CUDA/third_party/mmio/mmio.c
 )
 
@@ -44,7 +44,7 @@ set_source_files_properties(${CMAKE_CURRENT_SOURCE_DIR}/../SpMV_Cpp_CUDA/third_p
 
 target_include_directories(cg_benchmark PRIVATE
     ${CMAKE_CURRENT_SOURCE_DIR}/../SpMV_Cpp_CUDA/third_party/mmio
-    ${CMAKE_CURRENT_SOURCE_DIR}/../SpMV_Cpp_CUDA/examples/benchmark
+    ${CMAKE_CURRENT_SOURCE_DIR}/../SpMV_Cpp_CUDA/src
     ${CUDAToolkit_INCLUDE_DIRS}
 )
 

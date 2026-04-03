@@ -12,8 +12,20 @@ b = scipy.io.mmread("data/Pres_Poisson/Pres_Poisson_b.mtx")
 if scipy.sparse.issparse(b):
     b = b.toarray().flatten()
 
-# Solve the linear system A * x = b
-x = scipy.sparse.linalg.spsolve(A, b)
+# Solve the linear system A * x = b using Conjugate Gradient
+num_iters = 0
+def callback(xk):
+    global num_iters
+    num_iters += 1
+
+x, info = scipy.sparse.linalg.cg(A, b, callback=callback)
+
+if info == 0:
+    print(f"Solver converged in {num_iters} iterations.")
+elif info > 0:
+    print(f"Solver failed to converge after {info} iterations.")
+else:
+    print("Solver failed to converge due to an illegal input or breakdown.")
 
 # Print the solution vector (first 10 elements for brevity)
 print("Solution vector (first 10 elements):")
