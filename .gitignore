@@ -1,3 +1,28 @@
 *.o
 *.sqlite
 *.nsys-rep
+.vscode
+*.mtx
+*.mod
+*.out
+*.ncu-rep
+*.pdf
+*.tar.gz
+*.txt
+
+# CMake generated files and directories
+CMakeCache.txt
+CMakeFiles/
+CMakeScripts/
+Makefile
+cmake_install.cmake
+install_manifest.txt
+compile_commands.json
+CTestTestfile.cmake
+_deps/
+
+# Build directories
+build/
+build-*/
+bin/
+lib/
