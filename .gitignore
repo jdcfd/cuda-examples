@@ -8,7 +8,6 @@
 *.ncu-rep
 *.pdf
 *.tar.gz
-*.txt
 
 # CMake generated files and directories
 CMakeCache.txt
