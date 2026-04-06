@@ -56,6 +56,7 @@ int main() {
         CHECK_CUDA(cudaMemcpy(d_result, &h_result, sizeof(double), cudaMemcpyHostToDevice));
         cudaEventRecord(start);
         dot_product(d_x, d_y, d_result, N);
+        cudaMemcpy(&h_result, d_result, sizeof(double), cudaMemcpyDeviceToHost);
         cudaEventRecord(stop);
         cudaEventSynchronize(stop);
         cudaEventElapsedTime(&custom_ms, start, stop);
