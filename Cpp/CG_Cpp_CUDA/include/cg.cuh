@@ -2,7 +2,7 @@
 #include <sparse/csr_matrix.cuh>
 #include <sparse/dense_vector.cuh>
 
-namespace cg {
+namespace linsolvers {
 
 /**
  * Solve Ax = b using the Conjugate Gradient method on the GPU.
@@ -16,10 +16,16 @@ namespace cg {
  * @return          The number of iterations performed, or -1 if the solver
  *                  failed to converge within the maximum iterations.
  */
-int solve(const sparse::CSRMatrix& A, 
-          const sparse::DenseVector& b, 
-          sparse::DenseVector& x, 
-          double tol = 1e-6, 
-          int max_iters = 1000);
+int cg_solve(const sparse::CSRMatrix& A, 
+             const sparse::DenseVector& b, 
+             sparse::DenseVector& x, 
+             double tol = 1e-6, 
+             int max_iters = 1000);
 
-} // namespace cg
+int pcg_solve(const sparse::CSRMatrix& A, 
+              const sparse::DenseVector& b, 
+              sparse::DenseVector& x, 
+              double tol = 1e-6, 
+              int max_iters = 1000);
+
+} // namespace linsolvers

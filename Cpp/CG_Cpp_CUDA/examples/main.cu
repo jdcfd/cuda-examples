@@ -2,7 +2,7 @@
 #include "sparse/csr_matrix.cuh"
 #include "sparse/dense_vector.cuh"
 #include "sparse/spmv.cuh"
-#include "../include/cg.cuh"
+#include "../include/solver.cuh"
 
 #include <algorithm>
 #include <iostream>
@@ -126,11 +126,11 @@ int main(int argc, char** argv) {
     // Warm-up iteration
     sparse::DenseVector x_warmup(n);
     x_warmup.fill(0.0);
-    cg::solve(*mymat, b, x_warmup, 1e-6, 1);
+    linsolvers::solve(*mymat, b, x_warmup, linsolvers::SolverType::CG, 1e-6, 1);
 
     std::cout << "Starting CG solver...\n";
     auto t0 = std::chrono::high_resolution_clock::now();
-    int iters = cg::solve(*mymat, b, x, 1e-6, 10000);
+    int iters = linsolvers::solve(*mymat, b, x, linsolvers::SolverType::CG, 1e-6, 10000);
     cudaDeviceSynchronize();
     auto t1 = std::chrono::high_resolution_clock::now();
     
@@ -141,6 +141,36 @@ int main(int argc, char** argv) {
         std::cout << "Time elapsed: " << elapsed_ms << " ms\n";
     } else {
         std::cout << "CG Failed to converge within max iterations.\n";
+    }
+
+    if (has_ref_file) {
+        compare(x, x_ref);
+    } else if (has_b_file) {
+        x.update_host(); // ensure host is up to date
+        // std::cout << "Solution vector (first 10 elements):\n";
+        // for (int i = 0; i < std::min(10, n); ++i) {
+        //     std::cout << x.h_val[i] << " ";
+        // }
+        // std::cout << "\n";
+    } else {
+        compare(x, x_true);
+    }
+
+    // Now test PCG_JACOBI
+    x.fill(0.0);
+    std::cout << "\nStarting PCG_JACOBI solver...\n";
+    auto t2 = std::chrono::high_resolution_clock::now();
+    int iters_pcg = linsolvers::solve(*mymat, b, x, linsolvers::SolverType::PCG_JACOBI, 1e-6, 10000);
+    cudaDeviceSynchronize();
+    auto t3 = std::chrono::high_resolution_clock::now();
+    
+    double elapsed_ms_pcg = std::chrono::duration_cast<std::chrono::nanoseconds>(t3 - t2).count() * 1.e-6;
+
+    if (iters_pcg >= 0) {
+        std::cout << "PCG_JACOBI Converged in " << iters_pcg << " iterations.\n";
+        std::cout << "Time elapsed: " << elapsed_ms_pcg << " ms\n";
+    } else {
+        std::cout << "PCG_JACOBI Failed to converge within max iterations.\n";
     }
 
     if (has_ref_file) {

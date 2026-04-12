@@ -12,6 +12,7 @@ set(CMAKE_INSTALL_RPATH_USE_LINK_PATH TRUE)
 # Import the SpMV project
 # We use absolute paths to point to the sibling directory and a local binary dir.
 add_subdirectory(${CMAKE_CURRENT_SOURCE_DIR}/../SpMV_Cpp_CUDA ${CMAKE_CURRENT_BINARY_DIR}/spmv)
+add_subdirectory(${CMAKE_CURRENT_SOURCE_DIR}/../Dot_Cpp_CUDA ${CMAKE_CURRENT_BINARY_DIR}/dot)
 
 # CG Library
 add_library(cg
@@ -25,6 +26,7 @@ target_include_directories(cg PUBLIC
 
 target_link_libraries(cg PUBLIC
     sparse
+    dot_lib
 )
 
 set_target_properties(cg PROPERTIES
