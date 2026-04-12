@@ -54,6 +54,7 @@ target_link_libraries(cg_benchmark PRIVATE
     cg
     sparse
     CUDA::cusparse
+    CUDA::cublas
 )
 
 set_target_properties(cg_benchmark PROPERTIES
