@@ -15,7 +15,15 @@ This library is a cleaned-up and refactored version of an implementation origina
 - Easy to integrate into other CUDA projects
 
 ## Build commands
+
+This project is part of a unified suite. To build everything at once, run from the `Cpp/` root:
+```bash
+cmake -B build -S .
+cmake --build build -j
 ```
+
+Alternatively, you can still build it standalone:
+```bash
 cmake -B build -S .
 cmake --build build --config Release
 ```

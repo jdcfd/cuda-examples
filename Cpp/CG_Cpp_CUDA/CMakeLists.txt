@@ -1,18 +1,4 @@
-cmake_minimum_required(VERSION 3.18)
-project(cg_solver LANGUAGES C CXX CUDA)
-
-set(CMAKE_CXX_STANDARD 17)
-set(CMAKE_CUDA_STANDARD 17)
-set(CMAKE_CUDA_ARCHITECTURES 86)  # adjust for your GPU
-
-find_package(CUDAToolkit REQUIRED)
-
-set(CMAKE_INSTALL_RPATH_USE_LINK_PATH TRUE)
-
-# Import the SpMV project
-# We use absolute paths to point to the sibling directory and a local binary dir.
-add_subdirectory(${CMAKE_CURRENT_SOURCE_DIR}/../SpMV_Cpp_CUDA ${CMAKE_CURRENT_BINARY_DIR}/spmv)
-add_subdirectory(${CMAKE_CURRENT_SOURCE_DIR}/../Dot_Cpp_CUDA ${CMAKE_CURRENT_BINARY_DIR}/dot)
+# CG Library
 
 # CG Library
 add_library(cg
@@ -62,5 +48,3 @@ set_target_properties(cg_benchmark PROPERTIES
     BUILD_WITH_INSTALL_RPATH TRUE
 )
 
-message(STATUS "Build with: cmake -B build -S . && cmake --build build")
-message(STATUS "Run with: ./build/cg_benchmark ../SpMV_Cpp_CUDA/data/your_matrix.mtx")

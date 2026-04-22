@@ -1,14 +1,3 @@
-cmake_minimum_required(VERSION 3.18)
-project(dot_product LANGUAGES C CXX CUDA)
-
-set(CMAKE_CXX_STANDARD 17)
-set(CMAKE_CUDA_STANDARD 17)
-set(CMAKE_CUDA_ARCHITECTURES 86)  # adjust for your GPU
-
-find_package(CUDAToolkit REQUIRED)
-
-set(CMAKE_INSTALL_RPATH_USE_LINK_PATH TRUE)
-
 # Library
 add_library(dot_lib
     src/dot.cu
@@ -64,7 +53,5 @@ add_custom_target(profile
     COMMENT "Profiling dot_kernel_atomic with Nsight Compute"
 )
 
-message(STATUS "Build with: cmake -B build -S . && cmake --build build")
-message(STATUS "Run with: ./build/dot_example")
-message(STATUS "Profile with: cmake --build build --target profile")
+
 

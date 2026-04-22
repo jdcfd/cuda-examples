@@ -13,16 +13,19 @@ This solver hinges directly on the sparse matrix-vector multiplication (SpMV) lo
 
 ## Build Instructions
 
-Because this relies statically on `SpMV_Cpp_CUDA`, make sure the SpMV directory is sitting correctly adjacent to this project. We utilize `cmake` directly to organize our target compilations. 
+This project is now part of a unified suite in the `Cpp/` directory. To build everything (SpMV, Dot, and CG), run from the `Cpp/` root:
 
 ```bash
-# Navigate to the project root
-cd Cpp/CG_Cpp_CUDA
-
-# Configure the project 
+# From the Cpp/ directory
 cmake -B build -S .
+cmake --build build -j
+```
 
-# Build both the SpMV dependency library and the CG benchmarking executable
+If you wish to build only this module standalone:
+
+```bash
+# From Cpp/CG_Cpp_CUDA
+cmake -B build -S .
 cmake --build build
 ```
 
