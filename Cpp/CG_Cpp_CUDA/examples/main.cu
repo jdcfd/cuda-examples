@@ -25,6 +25,20 @@ void compare(const sparse::DenseVector& x, const sparse::DenseVector& x_true) {
     std::cout << "Max absolute error in solution: " << max_err << std::endl;
 }
 
+__global__ void r1_div_x(double *r1, double *r0, double *b) {
+    int gid = blockIdx.x * blockDim.x + threadIdx.x;
+    if (gid == 0) {
+        b[0] = r1[0] / r0[0];
+    }
+}
+
+__global__ void a_minus(double *a, double *na) {
+    int gid = blockIdx.x * blockDim.x + threadIdx.x;
+    if (gid == 0) {
+        na[0] = -(a[0]);
+    }
+}
+
 int solve_cusparse_cublas(const sparse::CSRMatrix& mat, const sparse::DenseVector& b, sparse::DenseVector& x, double tol, int max_iter, double& elapsed_ms) {
     int N = mat.nrows;
     int nz = mat.nnz;
@@ -55,8 +69,15 @@ int solve_cusparse_cublas(const sparse::CSRMatrix& mat, const sparse::DenseVecto
     double alpha = 1.0;
     double alpham1 = -1.0;
     double beta = 0.0;
-    double r0 = 0.0;
     double r1;
+    
+    double *d_r1, *d_r0, *d_dot, *d_a, *d_na, *d_b;
+    cudaMalloc((void **)&d_r1, sizeof(double));
+    cudaMalloc((void **)&d_r0, sizeof(double));
+    cudaMalloc((void **)&d_dot, sizeof(double));
+    cudaMalloc((void **)&d_a, sizeof(double));
+    cudaMalloc((void **)&d_na, sizeof(double));
+    cudaMalloc((void **)&d_b, sizeof(double));
     
     size_t bufferSize = 0;
     cusparseSpMV_bufferSize(cusparseHandle,
@@ -79,33 +100,48 @@ int solve_cusparse_cublas(const sparse::CSRMatrix& mat, const sparse::DenseVecto
                  CUDA_R_64F, CUSPARSE_SPMV_ALG_DEFAULT, buffer);
                  
     cublasDaxpy(cublasHandle, N, &alpham1, d_Ax, 1, d_r, 1);
-    cublasDdot(cublasHandle, N, d_r, 1, d_r, 1, &r1);
+    
+    cublasSetPointerMode(cublasHandle, CUBLAS_POINTER_MODE_DEVICE);
+    cublasDdot(cublasHandle, N, d_r, 1, d_r, 1, d_r1);
+    cudaMemcpy(&r1, d_r1, sizeof(double), cudaMemcpyDeviceToHost);
     
     int k = 1;
     while (r1 > tol * tol && k <= max_iter) {
         if (k > 1) {
-            double b_val = r1 / r0;
-            cublasDscal(cublasHandle, N, &b_val, d_p, 1);
+            r1_div_x<<<1, 1>>>(d_r1, d_r0, d_b);
+            cublasSetPointerMode(cublasHandle, CUBLAS_POINTER_MODE_DEVICE);
+            cublasDscal(cublasHandle, N, d_b, d_p, 1);
+            
+            cublasSetPointerMode(cublasHandle, CUBLAS_POINTER_MODE_HOST);
             cublasDaxpy(cublasHandle, N, &alpha, d_r, 1, d_p, 1);
         } else {
+            cublasSetPointerMode(cublasHandle, CUBLAS_POINTER_MODE_HOST);
             cublasDcopy(cublasHandle, N, d_r, 1, d_p, 1);
         }
         
+        cublasSetPointerMode(cublasHandle, CUBLAS_POINTER_MODE_HOST);
         cusparseSpMV(cusparseHandle,
                      CUSPARSE_OPERATION_NON_TRANSPOSE,
                      &alpha, matA, vecp, &beta, vecAx,
                      CUDA_R_64F, CUSPARSE_SPMV_ALG_DEFAULT, buffer);
                      
-        double dot;
-        cublasDdot(cublasHandle, N, d_p, 1, d_Ax, 1, &dot);
-        double a = r1 / dot;
+        cublasSetPointerMode(cublasHandle, CUBLAS_POINTER_MODE_DEVICE);
+        cublasDdot(cublasHandle, N, d_p, 1, d_Ax, 1, d_dot);
         
-        cublasDaxpy(cublasHandle, N, &a, d_p, 1, x.d_val, 1);
-        double na = -a;
-        cublasDaxpy(cublasHandle, N, &na, d_Ax, 1, d_r, 1);
+        r1_div_x<<<1, 1>>>(d_r1, d_dot, d_a);
         
-        r0 = r1;
-        cublasDdot(cublasHandle, N, d_r, 1, d_r, 1, &r1);
+        cublasDaxpy(cublasHandle, N, d_a, d_p, 1, x.d_val, 1);
+        
+        a_minus<<<1, 1>>>(d_a, d_na);
+        
+        cublasDaxpy(cublasHandle, N, d_na, d_Ax, 1, d_r, 1);
+        
+        cudaMemcpyAsync(d_r0, d_r1, sizeof(double), cudaMemcpyDeviceToDevice);
+        
+        cublasDdot(cublasHandle, N, d_r, 1, d_r, 1, d_r1);
+        cudaMemcpyAsync(&r1, d_r1, sizeof(double), cudaMemcpyDeviceToHost);
+        cudaDeviceSynchronize();
+        
         k++;
     }
     
@@ -124,6 +160,13 @@ int solve_cusparse_cublas(const sparse::CSRMatrix& mat, const sparse::DenseVecto
     cudaFree(d_r);
     cudaFree(d_p);
     cudaFree(d_Ax);
+    
+    cudaFree(d_r1);
+    cudaFree(d_r0);
+    cudaFree(d_dot);
+    cudaFree(d_a);
+    cudaFree(d_na);
+    cudaFree(d_b);
     
     return k - 1;
 }
