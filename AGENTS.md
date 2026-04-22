@@ -18,7 +18,18 @@ To ensure consistency in this project, please follow these guidelines:
   cmake -B build -S .
   cmake --build build -j
   ```
-- **Tests:** Always create a `tests/` directory within each component (e.g., `Cpp/SpMV_Cpp_CUDA/tests/`) to house Catch2 unit tests.
+- **Testing with Catch2**:
+  - Always create a `tests/` directory within each component (e.g., `Cpp/Dot_Cpp_CUDA/tests/`).
+  - The `tests/CMakeLists.txt` should look like this:
+    ```cmake
+    add_executable(test_component test_file.cu)
+    target_link_libraries(test_component PRIVATE component_lib Catch2::Catch2WithMain)
+    include(Catch)
+    catch_discover_tests(test_component)
+    ```
+  - **Running Tests**:
+    - **Individual**: Run the binary directly, e.g., `./build/Dot_Cpp_CUDA/tests/test_dot`.
+    - **All Tests**: Run `ctest` from the `build/` directory.
 - **DO NOT USE `pixi` for C++/CUDA**
 
 ## Documentation

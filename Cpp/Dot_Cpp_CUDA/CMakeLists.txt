@@ -52,6 +52,8 @@ add_custom_target(profile
     DEPENDS dot_example
     COMMENT "Profiling dot_kernel_atomic with Nsight Compute"
 )
-
-
-
+ 
+# Tests
+if(BUILD_TESTING)
+    add_subdirectory(tests)
+endif()

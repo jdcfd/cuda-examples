@@ -10,6 +10,18 @@ find_package(CUDAToolkit REQUIRED)
 
 set(CMAKE_INSTALL_RPATH_USE_LINK_PATH TRUE)
 
+include(FetchContent)
+
+FetchContent_Declare(
+  Catch2
+  GIT_REPOSITORY https://github.com/catchorg/Catch2.git
+  GIT_TAG        v3.4.0 # Or latest stable
+)
+
+FetchContent_MakeAvailable(Catch2)
+
+include(CTest)
+
 # Add Common module
 add_subdirectory(Common)
 
