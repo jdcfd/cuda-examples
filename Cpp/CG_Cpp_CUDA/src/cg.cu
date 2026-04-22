@@ -7,6 +7,7 @@
 #include <thrust/transform.h>
 #include <thrust/copy.h>
 #include <thrust/functional.h>
+#include <thrust/execution_policy.h>
 #include <cmath>
 #include <iostream>
 
@@ -38,7 +39,8 @@ int cg_solve(const sparse::CSRMatrix& A,
              const sparse::DenseVector& b, 
              sparse::DenseVector& x, 
              double tol, 
-             int max_iters) {
+             int max_iters,
+             cudaStream_t stream) {
     
     int n = A.nrows;
     
@@ -62,21 +64,22 @@ int cg_solve(const sparse::CSRMatrix& A,
     } free_wrapper{d_result};
 
     auto compute_dot = [&](double* d_x, double* d_y) {
-        cudaMemset(d_result, 0.0, sizeof(double));
-        dot_product(d_x, d_y, d_result, n);
+        cudaMemsetAsync(d_result, 0.0, sizeof(double), stream);
+        dot_product(d_x, d_y, d_result, n, stream);
         double h_result = 0.0;
-        cudaMemcpy(&h_result, d_result, sizeof(double), cudaMemcpyDeviceToHost);
+        cudaMemcpyAsync(&h_result, d_result, sizeof(double), cudaMemcpyDeviceToHost, stream);
+        cudaStreamSynchronize(stream);
         return h_result;
     };
     
     // Ap = A * x_0
-    sparse::multiply(A, x, Ap, 32);
+    sparse::multiply(A, x, Ap, 32, false, stream);
     
     // r_0 = b - A * x_0 (Ap)
-    thrust::transform(b_ptr, b_ptr + n, Ap_ptr, r_ptr, thrust::minus<double>());
+    thrust::transform(thrust::cuda::par.on(stream), b_ptr, b_ptr + n, Ap_ptr, r_ptr, thrust::minus<double>());
     
     // p_0 = r_0
-    thrust::copy(r_ptr, r_ptr + n, p_ptr);
+    thrust::copy(thrust::cuda::par.on(stream), r_ptr, r_ptr + n, p_ptr);
     
     // r_old_sq = r.T * r
     double r_old_sq = compute_dot(r.d_val, r.d_val);
@@ -93,7 +96,7 @@ int cg_solve(const sparse::CSRMatrix& A,
     
     for (int i = 0; i < max_iters; ++i) {
         // Ap = A * p
-        sparse::multiply(A, p, Ap, 32);
+        sparse::multiply(A, p, Ap, 32, false, stream);
         
         // pAp = p.T * Ap
         double pAp = compute_dot(p.d_val, Ap.d_val);
@@ -102,10 +105,10 @@ int cg_solve(const sparse::CSRMatrix& A,
         double alpha = r_old_sq / pAp;
         
         // x = x + alpha * p
-        thrust::transform(p_ptr, p_ptr + n, x_ptr, x_ptr, axpy_functor(alpha));
+        thrust::transform(thrust::cuda::par.on(stream), p_ptr, p_ptr + n, x_ptr, x_ptr, axpy_functor(alpha));
         
         // r = r - alpha * Ap
-        thrust::transform(Ap_ptr, Ap_ptr + n, r_ptr, r_ptr, axpy_functor(-alpha));
+        thrust::transform(thrust::cuda::par.on(stream), Ap_ptr, Ap_ptr + n, r_ptr, r_ptr, axpy_functor(-alpha));
         
         // r_new_sq = r.T * r
         double r_new_sq = compute_dot(r.d_val, r.d_val);
@@ -119,7 +122,7 @@ int cg_solve(const sparse::CSRMatrix& A,
         double beta = r_new_sq / r_old_sq;
         
         // p = r + beta * p
-        thrust::transform(r_ptr, r_ptr + n, p_ptr, p_ptr, p_update_functor(beta));
+        thrust::transform(thrust::cuda::par.on(stream), r_ptr, r_ptr + n, p_ptr, p_ptr, p_update_functor(beta));
         
         r_old_sq = r_new_sq;
     }
@@ -147,7 +150,8 @@ int pcg_solve(const sparse::CSRMatrix& A,
               const sparse::DenseVector& b, 
               sparse::DenseVector& x, 
               double tol, 
-              int max_iters) {
+              int max_iters,
+              cudaStream_t stream) {
     
     int n = A.nrows;
     
@@ -161,8 +165,8 @@ int pcg_solve(const sparse::CSRMatrix& A,
     // Extract inverse diagonal
     int threads_per_block = 256;
     int blocks = (n + threads_per_block - 1) / threads_per_block;
-    extract_inv_diag_kernel<<<blocks, threads_per_block>>>(n, A.d_rows, A.d_cols, A.d_values, inv_diag.d_val);
-    cudaDeviceSynchronize();
+    extract_inv_diag_kernel<<<blocks, threads_per_block, 0, stream>>>(n, A.d_rows, A.d_cols, A.d_values, inv_diag.d_val);
+    cudaStreamSynchronize(stream);
     
     // Wrap device pointers with thrust::device_ptr
     thrust::device_ptr<double> r_ptr(r.d_val);
@@ -181,24 +185,25 @@ int pcg_solve(const sparse::CSRMatrix& A,
     } free_wrapper{d_result};
 
     auto compute_dot = [&](double* d_x, double* d_y) {
-        cudaMemset(d_result, 0.0, sizeof(double));
-        dot_product(d_x, d_y, d_result, n);
+        cudaMemsetAsync(d_result, 0.0, sizeof(double), stream);
+        dot_product(d_x, d_y, d_result, n, stream);
         double h_result = 0.0;
-        cudaMemcpy(&h_result, d_result, sizeof(double), cudaMemcpyDeviceToHost);
+        cudaMemcpyAsync(&h_result, d_result, sizeof(double), cudaMemcpyDeviceToHost, stream);
+        cudaStreamSynchronize(stream);
         return h_result;
     };
     
     // Ap = A * x_0
-    sparse::multiply(A, x, Ap, 32);
+    sparse::multiply(A, x, Ap, 32, false, stream);
     
     // r_0 = b - A * x_0 (Ap)
-    thrust::transform(b_ptr, b_ptr + n, Ap_ptr, r_ptr, thrust::minus<double>());
+    thrust::transform(thrust::cuda::par.on(stream), b_ptr, b_ptr + n, Ap_ptr, r_ptr, thrust::minus<double>());
     
     // z_0 = M^-1 r_0
-    thrust::transform(inv_diag_ptr, inv_diag_ptr + n, r_ptr, z_ptr, thrust::multiplies<double>());
+    thrust::transform(thrust::cuda::par.on(stream), inv_diag_ptr, inv_diag_ptr + n, r_ptr, z_ptr, thrust::multiplies<double>());
     
     // p_0 = z_0
-    thrust::copy(z_ptr, z_ptr + n, p_ptr);
+    thrust::copy(thrust::cuda::par.on(stream), z_ptr, z_ptr + n, p_ptr);
     
     // r_old_sq = r.T * z
     double r_old_sq = compute_dot(r.d_val, z.d_val);
@@ -216,7 +221,7 @@ int pcg_solve(const sparse::CSRMatrix& A,
     
     for (int i = 0; i < max_iters; ++i) {
         // Ap = A * p
-        sparse::multiply(A, p, Ap, 32);
+        sparse::multiply(A, p, Ap, 32, false, stream);
         
         // pAp = p.T * Ap
         double pAp = compute_dot(p.d_val, Ap.d_val);
@@ -225,10 +230,10 @@ int pcg_solve(const sparse::CSRMatrix& A,
         double alpha = r_old_sq / pAp;
         
         // x = x + alpha * p
-        thrust::transform(p_ptr, p_ptr + n, x_ptr, x_ptr, axpy_functor(alpha));
+        thrust::transform(thrust::cuda::par.on(stream), p_ptr, p_ptr + n, x_ptr, x_ptr, axpy_functor(alpha));
         
         // r = r - alpha * Ap
-        thrust::transform(Ap_ptr, Ap_ptr + n, r_ptr, r_ptr, axpy_functor(-alpha));
+        thrust::transform(thrust::cuda::par.on(stream), Ap_ptr, Ap_ptr + n, r_ptr, r_ptr, axpy_functor(-alpha));
         
         // Check convergence
         r_norm = std::sqrt(compute_dot(r.d_val, r.d_val));
@@ -237,7 +242,7 @@ int pcg_solve(const sparse::CSRMatrix& A,
         }
         
         // z = M^-1 r
-        thrust::transform(inv_diag_ptr, inv_diag_ptr + n, r_ptr, z_ptr, thrust::multiplies<double>());
+        thrust::transform(thrust::cuda::par.on(stream), inv_diag_ptr, inv_diag_ptr + n, r_ptr, z_ptr, thrust::multiplies<double>());
         
         // r_new_sq = r.T * z
         double r_new_sq = compute_dot(r.d_val, z.d_val);
@@ -246,7 +251,7 @@ int pcg_solve(const sparse::CSRMatrix& A,
         double beta = r_new_sq / r_old_sq;
         
         // p = z + beta * p
-        thrust::transform(z_ptr, z_ptr + n, p_ptr, p_ptr, p_update_functor(beta));
+        thrust::transform(thrust::cuda::par.on(stream), z_ptr, z_ptr + n, p_ptr, p_ptr, p_update_functor(beta));
         
         r_old_sq = r_new_sq;
     }

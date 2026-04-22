@@ -42,22 +42,25 @@ int main() {
     cudaEventCreate(&start);
     cudaEventCreate(&stop);
 
+    cudaStream_t stream;
+    cudaStreamCreate(&stream);
+
     // --- Custom Dot Product ---
     // Warmup
     h_result = 0.0;
-    CHECK_CUDA(cudaMemcpy(d_result, &h_result, sizeof(double), cudaMemcpyHostToDevice));
-    dot_product(d_x, d_y, d_result, N);
-    CHECK_CUDA(cudaDeviceSynchronize());
+    CHECK_CUDA(cudaMemcpyAsync(d_result, &h_result, sizeof(double), cudaMemcpyHostToDevice, stream));
+    dot_product(d_x, d_y, d_result, N, stream);
+    CHECK_CUDA(cudaStreamSynchronize(stream));
 
     // Benchmark
     float custom_ms, total_custom_ms = 0.0f;
     for (int i = 0; i < num_runs; i++) {
         h_result = 0.0;
-        CHECK_CUDA(cudaMemcpy(d_result, &h_result, sizeof(double), cudaMemcpyHostToDevice));
-        cudaEventRecord(start);
-        dot_product(d_x, d_y, d_result, N);
-        cudaMemcpy(&h_result, d_result, sizeof(double), cudaMemcpyDeviceToHost);
-        cudaEventRecord(stop);
+        CHECK_CUDA(cudaMemcpyAsync(d_result, &h_result, sizeof(double), cudaMemcpyHostToDevice, stream));
+        cudaEventRecord(start, stream);
+        dot_product(d_x, d_y, d_result, N, stream);
+        CHECK_CUDA(cudaMemcpyAsync(&h_result, d_result, sizeof(double), cudaMemcpyDeviceToHost, stream));
+        cudaEventRecord(stop, stream);
         cudaEventSynchronize(stop);
         cudaEventElapsedTime(&custom_ms, start, stop);
         total_custom_ms += custom_ms;
@@ -127,6 +130,7 @@ int main() {
     cublasDestroy(handle);
     cudaEventDestroy(start);
     cudaEventDestroy(stop);
+    cudaStreamDestroy(stream);
     CHECK_CUDA(cudaFree(d_x));
     CHECK_CUDA(cudaFree(d_y));
     CHECK_CUDA(cudaFree(d_result));

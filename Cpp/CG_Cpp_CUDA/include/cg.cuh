@@ -1,4 +1,5 @@
 #pragma once
+#include <cuda_runtime.h>
 #include <sparse/csr_matrix.cuh>
 #include <sparse/dense_vector.cuh>
 
@@ -20,12 +21,14 @@ int cg_solve(const sparse::CSRMatrix& A,
              const sparse::DenseVector& b, 
              sparse::DenseVector& x, 
              double tol = 1e-6, 
-             int max_iters = 1000);
+             int max_iters = 1000,
+             cudaStream_t stream = nullptr);
 
 int pcg_solve(const sparse::CSRMatrix& A, 
               const sparse::DenseVector& b, 
               sparse::DenseVector& x, 
               double tol = 1e-6, 
-              int max_iters = 1000);
+              int max_iters = 1000,
+              cudaStream_t stream = nullptr);
 
 } // namespace linsolvers

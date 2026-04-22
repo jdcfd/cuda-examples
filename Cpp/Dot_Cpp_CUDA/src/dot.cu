@@ -42,7 +42,7 @@ __global__ void dot_kernel_atomic(double* x, double* y, double* result, int N) {
     }
 }
 
-void dot_product(double* x, double* y, double* result, int N) {
+void dot_product(double* x, double* y, double* result, int N, cudaStream_t stream) {
     int blockSize = 64;
     // Allocate shared memory size: blockSize * sizeof(double)
     size_t sharedMemSize = blockSize * sizeof(double);
@@ -65,6 +65,6 @@ void dot_product(double* x, double* y, double* result, int N) {
     if (numBlocks > maxBlocks) {
         numBlocks = maxBlocks;
     }
-    dot_kernel_atomic<<<numBlocks, blockSize, sharedMemSize>>>(x, y, result, N);
+    dot_kernel_atomic<<<numBlocks, blockSize, sharedMemSize, stream>>>(x, y, result, N);
     // cudaDeviceSynchronize();
 }

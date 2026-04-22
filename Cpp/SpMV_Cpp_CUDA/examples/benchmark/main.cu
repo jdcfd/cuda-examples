@@ -138,23 +138,27 @@ int main(int argc, char const *argv[]) {
 
     Ycsp.update_host();
 
+    cudaStream_t stream;
+    cudaStreamCreate(&stream);
+
     // Test our library kernels
     for (int bs = 4; bs <= 32; bs *= 2) {
         {
             Y.fill(0.0);
             std::cout << "Running test with block_size=" << bs << " shared=false" << std::endl;
-            TIME_KERNEL(sparse::multiply(*mymat, X, Y, bs, false));
+            TIME_KERNEL(sparse::multiply(*mymat, X, Y, bs, false, stream));
             Y.update_host();
             compare_values(Y, Ycsp);
 
             Y.fill(0.0);
             std::cout << "Running test with block_size=" << bs << " shared=true" << std::endl;
-            TIME_KERNEL(sparse::multiply(*mymat, X, Y, bs, true));
+            TIME_KERNEL(sparse::multiply(*mymat, X, Y, bs, true, stream));
             Y.update_host();
             compare_values(Y, Ycsp);
             std::cout << std::endl;
         }
     }
 
+    cudaStreamDestroy(stream);
     return 0;
 }
