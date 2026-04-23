@@ -48,3 +48,16 @@ set_target_properties(cg_benchmark PROPERTIES
     BUILD_WITH_INSTALL_RPATH TRUE
 )
 
+# Integration: Pres_Poisson matrix, UF collection RHS, reference from SciPy/solution.txt
+add_test(
+    NAME cg_pres_poisson
+    COMMAND $<TARGET_FILE:cg_benchmark>
+        ${CMAKE_SOURCE_DIR}/SpMV_Cpp_CUDA/data/Pres_Poisson/Pres_Poisson.mtx
+        ${CMAKE_SOURCE_DIR}/SpMV_Cpp_CUDA/data/Pres_Poisson/Pres_Poisson_b.mtx
+        ${CMAKE_SOURCE_DIR}/SpMV_Cpp_CUDA/data/Pres_Poisson/solution.txt
+)
+set_tests_properties(cg_pres_poisson PROPERTIES
+    TIMEOUT 3600
+    LABELS "cg;gpu;integration"
+)
+
