@@ -49,3 +49,30 @@ TEST_CASE("Dot product calculation is correct", "[dot]") {
     cudaFree(d_y);
     cudaFree(d_result);
 }
+
+TEST_CASE("Dot product float", "[dot]") {
+    const int N = 10000;
+    std::vector<float> h_x(N, 1.f);
+    std::vector<float> h_y(N, 2.f);
+    float h_result = 0.f;
+
+    float *d_x, *d_y, *d_result;
+    cudaMalloc(&d_x, N * sizeof(float));
+    cudaMalloc(&d_y, N * sizeof(float));
+    cudaMalloc(&d_result, sizeof(float));
+
+    cudaMemcpy(d_x, h_x.data(), N * sizeof(float), cudaMemcpyHostToDevice);
+    cudaMemcpy(d_y, h_y.data(), N * sizeof(float), cudaMemcpyHostToDevice);
+    cudaMemset(d_result, 0, sizeof(float));
+
+    dot_product(d_x, d_y, d_result, N);
+    cudaDeviceSynchronize();
+    cudaMemcpy(&h_result, d_result, sizeof(float), cudaMemcpyDeviceToHost);
+
+    float expected = 20000.f;
+    REQUIRE_THAT(h_result, Catch::Matchers::WithinRel(expected, 1e-5f));
+
+    cudaFree(d_x);
+    cudaFree(d_y);
+    cudaFree(d_result);
+}

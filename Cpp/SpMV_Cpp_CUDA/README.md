@@ -8,8 +8,9 @@ This library is a cleaned-up and refactored version of an implementation origina
 ## Features
 
 - Clean, reusable C++ library under the `sparse` namespace
-- Templated CSR SpMV kernels with optional shared-memory reduction
-- Simple high-level API: `sparse::multiply(A, x, y)`
+- CSR SpMV kernels in `float` and `double` (`sparse::multiply` overloads; types `CSRMatrix` / `DenseVector` vs `CSRMatrixF` / `DenseVectorF`)
+- Optional shared-memory reduction
+- Simple high-level API: `sparse::multiply(A, x, y)` (matrix and vector must use the same scalar type)
 - Separate benchmark/example from the core library
 - Modern CMake build system
 - Easy to integrate into other CUDA projects
@@ -21,6 +22,8 @@ This project is part of a unified suite. To build everything at once, run from t
 cmake -B build -S .
 cmake --build build -j
 ```
+
+`CSRMatrixReader` can fill either `CSRMatrix` or `CSRMatrixF` from Matrix Market files (values are read as `double` from the file, then cast to `float` for the single-precision matrix).
 
 Alternatively, you can still build it standalone:
 ```bash

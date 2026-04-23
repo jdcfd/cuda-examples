@@ -2,20 +2,24 @@
 
 namespace sparse {
 
-class DenseVector {
+template <typename T>
+class DenseVectorT {
 public:
     int size;
-    double * h_val = nullptr;
-    double * d_val = nullptr;
+    T* h_val = nullptr;
+    T* d_val = nullptr;
 
-    explicit DenseVector(int n);
-    ~DenseVector();
+    explicit DenseVectorT(int n);
+    ~DenseVectorT();
 
     void generate();
     void print() const;
     void update_host();
     void update_device();
-    void fill(double v);
+    void fill(T v);
 };
+
+using DenseVector  = DenseVectorT<double>;
+using DenseVectorF = DenseVectorT<float>;
 
 } // namespace sparse

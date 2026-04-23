@@ -2,7 +2,7 @@
 
 #include <cuda_runtime.h>
 
-// Computes the dot product of two double-precision arrays
-// N is the length of the arrays
-// result is a pointer to a single double where the output will be stored
+// Dot product of two arrays on the device. Caller must zero *result before launch.
 void dot_product(double* x, double* y, double* result, int N, cudaStream_t stream = nullptr);
+
+void dot_product(float* x, float* y, float* result, int N, cudaStream_t stream = nullptr);

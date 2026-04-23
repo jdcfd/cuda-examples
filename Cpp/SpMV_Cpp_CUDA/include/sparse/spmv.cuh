@@ -20,4 +20,11 @@ void multiply(const CSRMatrix& A,
               bool use_shared_memory = false,
               cudaStream_t stream = nullptr);
 
+void multiply(const CSRMatrixF& A,
+              const DenseVectorF& x,
+              DenseVectorF& y,
+              int block_size = 32,
+              bool use_shared_memory = false,
+              cudaStream_t stream = nullptr);
+
 } // namespace sparse

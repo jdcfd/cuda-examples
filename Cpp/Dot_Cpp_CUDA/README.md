@@ -1,3 +1,6 @@
+## Single-precision API
+
+`dot_product` is overloaded for `double*` and `float*` device arrays. The output (`result`) must be zeroed on the device before the call, as in the double-precision path.
 
 ## Build and Run
 
