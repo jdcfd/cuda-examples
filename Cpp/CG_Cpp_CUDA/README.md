@@ -4,6 +4,8 @@ This project contains a GPU-accelerated implementation of the **Conjugate Gradie
 
 This solver hinges directly on the sparse matrix-vector multiplication (SpMV) logic and data structures provided by the neighboring `../SpMV_Cpp_CUDA` project.
 
+`cg_solve`, `pcg_solve`, and `linsolvers::solve` are overloaded for double (`CSRMatrix` / `DenseVector`) and single precision (`CSRMatrixF` / `DenseVectorF`). Convergence tolerance remains `double` in both cases.
+
 ## Project Structure
 
 *   `CMakeLists.txt`: Project definitions connecting seamlessly with SpMV via `add_subdirectory`.

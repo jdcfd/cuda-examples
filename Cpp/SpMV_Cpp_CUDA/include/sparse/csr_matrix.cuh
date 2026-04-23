@@ -3,28 +3,30 @@
 
 namespace sparse {
 
-class CSRMatrix {
+template <typename T>
+class CSRMatrixT {
 public:
     int nrows = 0;
     int ncols = 0;
     int nnz   = 0;
 
-    // Host pointers
     int*    h_rows   = nullptr;
     int*    h_cols   = nullptr;
-    double* h_values = nullptr;
+    T*      h_values = nullptr;
 
-    // Device pointers
     int*    d_rows   = nullptr;
     int*    d_cols   = nullptr;
-    double* d_values = nullptr;
+    T*      d_values = nullptr;
 
-    CSRMatrix(int nr, int nc, int nonzeros);
-    ~CSRMatrix();
+    CSRMatrixT(int nr, int nc, int nonzeros);
+    ~CSRMatrixT();
 
     void update_host();
     void update_device();
     void print() const;
 };
+
+using CSRMatrix  = CSRMatrixT<double>;
+using CSRMatrixF = CSRMatrixT<float>;
 
 } // namespace sparse

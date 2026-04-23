@@ -5,7 +5,8 @@
 
 namespace sparse {
 
-CSRMatrix::CSRMatrix(int nr, int nc, int nonzeros) {
+template <typename T>
+CSRMatrixT<T>::CSRMatrixT(int nr, int nc, int nonzeros) {
     if (nonzeros > ((long)nr) * nc) {
         throw std::invalid_argument("received nnz > nrows * ncols");
     }
@@ -13,17 +14,17 @@ CSRMatrix::CSRMatrix(int nr, int nc, int nonzeros) {
     ncols = nc;
     nnz = nonzeros;
 
-    // allocate memory
     checkCudaErrors(cudaMallocHost(reinterpret_cast<void **>(&h_rows), sizeof(int) * (nrows + 1)));
     checkCudaErrors(cudaMallocHost(reinterpret_cast<void **>(&h_cols), sizeof(int) * nnz));
-    checkCudaErrors(cudaMallocHost(reinterpret_cast<void **>(&h_values), sizeof(double) * nnz));
+    checkCudaErrors(cudaMallocHost(reinterpret_cast<void **>(&h_values), sizeof(T) * nnz));
 
     checkCudaErrors(cudaMalloc(reinterpret_cast<void **>(&d_rows), sizeof(int) * (nrows + 1)));
     checkCudaErrors(cudaMalloc(reinterpret_cast<void **>(&d_cols), sizeof(int) * nnz));
-    checkCudaErrors(cudaMalloc(reinterpret_cast<void **>(&d_values), sizeof(double) * nnz));
+    checkCudaErrors(cudaMalloc(reinterpret_cast<void **>(&d_values), sizeof(T) * nnz));
 }
 
-CSRMatrix::~CSRMatrix() {
+template <typename T>
+CSRMatrixT<T>::~CSRMatrixT() {
     if (h_rows) {
         checkCudaErrors(cudaFreeHost(h_rows));
         h_rows = nullptr;
@@ -51,24 +52,27 @@ CSRMatrix::~CSRMatrix() {
     nrows = ncols = nnz = 0;
 }
 
-void CSRMatrix::update_host() {
-    checkCudaErrors(cudaMemcpyAsync(h_values, d_values, sizeof(double)*nnz, cudaMemcpyDeviceToHost));
-    checkCudaErrors(cudaMemcpyAsync(h_cols,   d_cols,   sizeof(int)*nnz,    cudaMemcpyDeviceToHost));
-    checkCudaErrors(cudaMemcpyAsync(h_rows,   d_rows,   sizeof(int)*(nrows+1), cudaMemcpyDeviceToHost));
+template <typename T>
+void CSRMatrixT<T>::update_host() {
+    checkCudaErrors(cudaMemcpyAsync(h_values, d_values, sizeof(T) * nnz, cudaMemcpyDeviceToHost));
+    checkCudaErrors(cudaMemcpyAsync(h_cols, d_cols, sizeof(int) * nnz, cudaMemcpyDeviceToHost));
+    checkCudaErrors(cudaMemcpyAsync(h_rows, d_rows, sizeof(int) * (nrows + 1), cudaMemcpyDeviceToHost));
     cudaDeviceSynchronize();
 }
 
-void CSRMatrix::update_device() {
-    checkCudaErrors(cudaMemcpyAsync(d_values, h_values, sizeof(double)*nnz, cudaMemcpyHostToDevice));
-    checkCudaErrors(cudaMemcpyAsync(d_cols,   h_cols,   sizeof(int)*nnz,    cudaMemcpyHostToDevice));
-    checkCudaErrors(cudaMemcpyAsync(d_rows,   h_rows,   sizeof(int)*(nrows+1), cudaMemcpyHostToDevice));
+template <typename T>
+void CSRMatrixT<T>::update_device() {
+    checkCudaErrors(cudaMemcpyAsync(d_values, h_values, sizeof(T) * nnz, cudaMemcpyHostToDevice));
+    checkCudaErrors(cudaMemcpyAsync(d_cols, h_cols, sizeof(int) * nnz, cudaMemcpyHostToDevice));
+    checkCudaErrors(cudaMemcpyAsync(d_rows, h_rows, sizeof(int) * (nrows + 1), cudaMemcpyHostToDevice));
     cudaDeviceSynchronize();
 }
 
-void CSRMatrix::print() const {
+template <typename T>
+void CSRMatrixT<T>::print() const {
     if (nrows > 0 && nnz > 0) {
         std::cout << "Nrows: " << nrows << " Ncols: " << ncols << std::endl;
-        std::cout << "Nnz: "   << nnz << std::endl;
+        std::cout << "Nnz: " << nnz << std::endl;
         for (int i = 0; i < nrows + 1; i++) {
             std::cout << "rows[" << i << "] = " << h_rows[i] << std::endl;
         }
@@ -81,5 +85,8 @@ void CSRMatrix::print() const {
         std::cout << "Matrix has not been initialized." << std::endl;
     }
 }
+
+template class CSRMatrixT<double>;
+template class CSRMatrixT<float>;
 
 } // namespace sparse

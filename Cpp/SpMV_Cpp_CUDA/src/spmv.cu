@@ -6,25 +6,34 @@ namespace sparse {
 
 namespace {
 
-template <int BLOCK_SIZE>
-void launch_spmv(const CSRMatrix& A, const DenseVector& x, DenseVector& y,
-                 bool use_shared, dim3 blocks, dim3 threads, size_t shmem, cudaStream_t stream)
+template <typename T, int BLOCK_SIZE>
+void launch_spmv(const CSRMatrixT<T>& A,
+                 const DenseVectorT<T>& x,
+                 DenseVectorT<T>& y,
+                 bool use_shared,
+                 dim3 blocks,
+                 dim3 threads,
+                 size_t shmem,
+                 cudaStream_t stream)
 {
     if (use_shared) {
-        sparse_mvm_shared<BLOCK_SIZE><<<blocks, threads, shmem, stream>>>(
+        sparse_mvm_shared<BLOCK_SIZE, T><<<blocks, threads, shmem, stream>>>(
             A.d_rows, A.d_cols, A.d_values, x.d_val, y.d_val,
             A.nrows, A.ncols);
     } else {
-        sparse_mvm<BLOCK_SIZE><<<blocks, threads, 0, stream>>>(
+        sparse_mvm<BLOCK_SIZE, T><<<blocks, threads, 0, stream>>>(
             A.d_rows, A.d_cols, A.d_values, x.d_val, y.d_val,
             A.nrows, A.ncols);
     }
 }
 
-} // anonymous namespace
-
-void multiply(const CSRMatrix& A, const DenseVector& x, DenseVector& y,
-              int block_size, bool use_shared_memory, cudaStream_t stream)
+template <typename T>
+void multiply_impl(const CSRMatrixT<T>& A,
+                     const DenseVectorT<T>& x,
+                     DenseVectorT<T>& y,
+                     int block_size,
+                     bool use_shared_memory,
+                     cudaStream_t stream)
 {
     if (A.nrows == 0) return;
 
@@ -33,18 +42,32 @@ void multiply(const CSRMatrix& A, const DenseVector& x, DenseVector& y,
 
     dim3 blocks(num_blocks, 1, 1);
     dim3 threads(block_size, rows_per_block, 1);
-    size_t shmem = rows_per_block * block_size * sizeof(double);
+    size_t shmem = rows_per_block * block_size * sizeof(T);
 
     switch (block_size) {
-        case 128: launch_spmv<128>(A, x, y, use_shared_memory, blocks, threads, shmem, stream); break;
-        case 64:  launch_spmv<64> (A, x, y, use_shared_memory, blocks, threads, shmem, stream); break;
-        case 32:  launch_spmv<32> (A, x, y, use_shared_memory, blocks, threads, shmem, stream); break;
-        case 16:  launch_spmv<16> (A, x, y, use_shared_memory, blocks, threads, shmem, stream); break;
-        case 8:   launch_spmv<8>  (A, x, y, use_shared_memory, blocks, threads, shmem, stream); break;
-        case 4:   launch_spmv<4>  (A, x, y, use_shared_memory, blocks, threads, shmem, stream); break;
-        case 2:   launch_spmv<2>  (A, x, y, use_shared_memory, blocks, threads, 0, stream); break;
-        default:  launch_spmv<1>  (A, x, y, use_shared_memory, blocks, threads, 0, stream); break;
+        case 128: launch_spmv<T, 128>(A, x, y, use_shared_memory, blocks, threads, shmem, stream); break;
+        case 64:  launch_spmv<T, 64> (A, x, y, use_shared_memory, blocks, threads, shmem, stream); break;
+        case 32:  launch_spmv<T, 32> (A, x, y, use_shared_memory, blocks, threads, shmem, stream); break;
+        case 16:  launch_spmv<T, 16> (A, x, y, use_shared_memory, blocks, threads, shmem, stream); break;
+        case 8:   launch_spmv<T, 8>  (A, x, y, use_shared_memory, blocks, threads, shmem, stream); break;
+        case 4:   launch_spmv<T, 4>  (A, x, y, use_shared_memory, blocks, threads, shmem, stream); break;
+        case 2:   launch_spmv<T, 2>  (A, x, y, use_shared_memory, blocks, threads, 0, stream); break;
+        default:  launch_spmv<T, 1>  (A, x, y, use_shared_memory, blocks, threads, 0, stream); break;
     }
+}
+
+} // anonymous namespace
+
+void multiply(const CSRMatrix& A, const DenseVector& x, DenseVector& y,
+              int block_size, bool use_shared_memory, cudaStream_t stream)
+{
+    multiply_impl<double>(A, x, y, block_size, use_shared_memory, stream);
+}
+
+void multiply(const CSRMatrixF& A, const DenseVectorF& x, DenseVectorF& y,
+              int block_size, bool use_shared_memory, cudaStream_t stream)
+{
+    multiply_impl<float>(A, x, y, block_size, use_shared_memory, stream);
 }
 
 } // namespace sparse
