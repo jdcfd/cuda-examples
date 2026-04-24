@@ -8,22 +8,28 @@ Sparse Matrix-Vector multiplication benchmark using the 'sparse' library.
 #include "sparse/dense_vector.cuh"
 #include "sparse/spmv.cuh"
 #include <cusparse.h>
-#include <chrono>
 #include <memory>
 #include <iostream>
 #include <cmath>
 
-#define TIME_KERNEL(func)                                                   \
+#define TIME_KERNEL(func, stream)                                           \
 {                                                                           \
     const int NRUNS = 10;                                                   \
-    double total = 0.0;                                                     \
+    float total = 0.0f;                                                     \
+    cudaEvent_t start, stop;                                                \
+    checkCudaErrors(cudaEventCreate(&start));                               \
+    checkCudaErrors(cudaEventCreate(&stop));                                \
     for(int irun = 0; irun < NRUNS; irun++) {                              \
-        auto t0 = std::chrono::high_resolution_clock::now();                \
+        checkCudaErrors(cudaEventRecord(start, stream));                    \
         (func);                                                             \
-        cudaDeviceSynchronize();                                            \
-        auto t1 = std::chrono::high_resolution_clock::now();                \
-        total += std::chrono::duration_cast<std::chrono::nanoseconds>(t1 - t0).count() * 1.e-6; \
+        checkCudaErrors(cudaEventRecord(stop, stream));                     \
+        checkCudaErrors(cudaEventSynchronize(stop));                        \
+        float elapsed = 0.0f;                                               \
+        checkCudaErrors(cudaEventElapsedTime(&elapsed, start, stop));       \
+        total += elapsed;                                                   \
     }                                                                       \
+    checkCudaErrors(cudaEventDestroy(start));                               \
+    checkCudaErrors(cudaEventDestroy(stop));                                \
     std::cout << "-- Kernel duration (avg of " << NRUNS << " runs): " << (total / NRUNS) << " ms" << std::endl; \
 }
 
@@ -85,6 +91,9 @@ int main(int argc, char const *argv[]) {
     sparse::DenseVector Y(mymat->nrows);
     sparse::DenseVector Ycsp(mymat->nrows);
 
+    cudaStream_t stream;
+    checkCudaErrors(cudaStreamCreate(&stream));
+
     // --- cuSPARSE reference ---
     {
         cusparseHandle_t     handle = nullptr;
@@ -95,6 +104,7 @@ int main(int argc, char const *argv[]) {
         double alpha = 1.0, beta = 0.0;
 
         CHECK_CUSPARSE(cusparseCreate(&handle));
+        CHECK_CUSPARSE(cusparseSetStream(handle, stream));
         CHECK_CUSPARSE(cusparseCreateCsr(&matA, mymat->nrows, mymat->ncols, mymat->nnz,
                                          mymat->d_rows, mymat->d_cols, mymat->d_values,
                                          CUSPARSE_INDEX_32I, CUSPARSE_INDEX_32I,
@@ -113,20 +123,27 @@ int main(int argc, char const *argv[]) {
         CHECK_CUSPARSE(cusparseSpMV(handle, CUSPARSE_OPERATION_NON_TRANSPOSE,
                                     &alpha, matA, vecX, &beta, vecY, CUDA_R_64F,
                                     CUSPARSE_SPMV_ALG_DEFAULT, dBuffer));
-        cudaDeviceSynchronize();
+        checkCudaErrors(cudaStreamSynchronize(stream));
 
         // Timed runs
         const int NRUNS = 10;
-        double total = 0.0;
+        float total = 0.0f;
+        cudaEvent_t start, stop;
+        checkCudaErrors(cudaEventCreate(&start));
+        checkCudaErrors(cudaEventCreate(&stop));
         for (int irun = 0; irun < NRUNS; irun++) {
-            auto t0 = std::chrono::high_resolution_clock::now();
+            checkCudaErrors(cudaEventRecord(start, stream));
             CHECK_CUSPARSE(cusparseSpMV(handle, CUSPARSE_OPERATION_NON_TRANSPOSE,
                                         &alpha, matA, vecX, &beta, vecY, CUDA_R_64F,
                                         CUSPARSE_SPMV_ALG_DEFAULT, dBuffer));
-            cudaDeviceSynchronize();
-            auto t1 = std::chrono::high_resolution_clock::now();
-            total += std::chrono::duration_cast<std::chrono::nanoseconds>(t1 - t0).count() * 1.e-6;
+            checkCudaErrors(cudaEventRecord(stop, stream));
+            checkCudaErrors(cudaEventSynchronize(stop));
+            float elapsed = 0.0f;
+            checkCudaErrors(cudaEventElapsedTime(&elapsed, start, stop));
+            total += elapsed;
         }
+        checkCudaErrors(cudaEventDestroy(start));
+        checkCudaErrors(cudaEventDestroy(stop));
         std::cout << "\n-- cusparseSpMV duration (avg of " << NRUNS << " runs): " << (total / NRUNS) << " ms\n" << std::endl;
 
         CHECK_CUSPARSE(cusparseDestroySpMat(matA));
@@ -138,25 +155,23 @@ int main(int argc, char const *argv[]) {
 
     Ycsp.update_host();
 
-    cudaStream_t stream;
-    cudaStreamCreate(&stream);
-
     // Test our library kernels
-    for (int bs = 4; bs <= 32; bs *= 2) {
-        {
+    int maxbs = ((mnnzpr + 32 - 1) / 32 + 1) * 32;
+    for (int bs = 4; bs <= maxbs; bs *= 2) {
+        if(bs <= 32){
             Y.fill(0.0);
             std::cout << "Running test with block_size=" << bs << " shared=false" << std::endl;
-            TIME_KERNEL(sparse::multiply(*mymat, X, Y, bs, false, stream));
+            TIME_KERNEL(sparse::multiply(*mymat, X, Y, bs, false, stream), stream);
             Y.update_host();
             compare_values(Y, Ycsp);
-
-            Y.fill(0.0);
-            std::cout << "Running test with block_size=" << bs << " shared=true" << std::endl;
-            TIME_KERNEL(sparse::multiply(*mymat, X, Y, bs, true, stream));
-            Y.update_host();
-            compare_values(Y, Ycsp);
-            std::cout << std::endl;
         }
+
+        Y.fill(0.0);
+        std::cout << "Running test with block_size=" << bs << " shared=true" << std::endl;
+        TIME_KERNEL(sparse::multiply(*mymat, X, Y, bs, true, stream), stream);
+        Y.update_host();
+        compare_values(Y, Ycsp);
+        std::cout << std::endl;
     }
 
     cudaStreamDestroy(stream);

@@ -29,12 +29,12 @@ __global__ void sparse_mvm(int* rows, int* cols, T* vals, T* vec, T* res, int nr
 template <int block_size, typename T>
 __device__ void warpReduce(volatile T* sdata, unsigned int tid)
 {
-    if (block_size >= 64) sdata[tid] += sdata[tid + 32];
-    if (block_size >= 32) sdata[tid] += sdata[tid + 16];
-    if (block_size >= 16) sdata[tid] += sdata[tid + 8];
-    if (block_size >= 8) sdata[tid] += sdata[tid + 4];
-    if (block_size >= 4) sdata[tid] += sdata[tid + 2];
-    if (block_size >= 2) sdata[tid] += sdata[tid + 1];
+    if constexpr (block_size >= 64) sdata[tid] += sdata[tid + 32];
+    if constexpr (block_size >= 32) sdata[tid] += sdata[tid + 16];
+    if constexpr (block_size >= 16) sdata[tid] += sdata[tid + 8];
+    if constexpr (block_size >= 8) sdata[tid] += sdata[tid + 4];
+    if constexpr (block_size >= 4) sdata[tid] += sdata[tid + 2];
+    if constexpr (block_size >= 2) sdata[tid] += sdata[tid + 1];
 }
 
 template <int block_size, typename T>

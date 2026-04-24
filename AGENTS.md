@@ -32,5 +32,3 @@ To ensure consistency in this project, please follow these guidelines:
     - **All Tests**: Run `ctest` from the `build/` directory.
 - **DO NOT USE `pixi` for C++/CUDA**
 
-## Documentation
-- Always update the `README.md` files when making significant changes to the code.

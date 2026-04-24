@@ -13,7 +13,8 @@ __global__ void dot_kernel_atomic(double* x, double* y, double* result, int N)
     for (int i = global_id; i < N / 2; i += blockDim.x * gridDim.x) {
         double2 x2 = reinterpret_cast<double2*>(x)[i];
         double2 y2 = reinterpret_cast<double2*>(y)[i];
-        temp += x2.x * y2.x + x2.y * y2.y;
+        temp += x2.x * y2.x;
+        temp += x2.y * y2.y;
     }
     if (global_id == N / 2 && N % 2 == 1) {
         temp += x[N - 1] * y[N - 1];
@@ -39,10 +40,10 @@ __global__ void dot_kernel_atomic(double* x, double* y, double* result, int N)
     }
 }
 
-__global__ void dot_kernel_atomic_float(float* x, float* y, float* result, int N)
+__global__ void dot_kernel_atomic_float(const float* x, const float* y, float* result, int N)
 {
     extern __shared__ unsigned char dot_smem[];
-    float* sdata = reinterpret_cast<float*>(dot_smem);
+    volatile float* sdata = reinterpret_cast<float*>(dot_smem);
 
     unsigned int tid = threadIdx.x;
     unsigned int global_id = blockIdx.x * blockDim.x + threadIdx.x;
@@ -50,14 +51,20 @@ __global__ void dot_kernel_atomic_float(float* x, float* y, float* result, int N
     float temp = 0.f;
     const int vec4_count = N / 4;
     for (int i = global_id; i < vec4_count; i += blockDim.x * gridDim.x) {
-        float4 x4 = reinterpret_cast<float4*>(x)[i];
-        float4 y4 = reinterpret_cast<float4*>(y)[i];
-        temp += x4.x * y4.x + x4.y * y4.y + x4.z * y4.z + x4.w * y4.w;
+        const float4 x4 = reinterpret_cast<const float4*>(x)[i];
+        const float4 y4 = reinterpret_cast<const float4*>(y)[i];
+        temp += x4.x * y4.x;
+        temp += x4.y * y4.y;
+        temp += x4.z * y4.z;
+        temp += x4.w * y4.w;
     }
     const int tail_start = vec4_count * 4;
     for (int j = global_id + tail_start; j < N; j += blockDim.x * gridDim.x) {
         temp += x[j] * y[j];
     }
+    // for (int j = global_id; j < N; j += blockDim.x * gridDim.x) {
+    //     temp += x[j] * y[j];
+    // }
 
     sdata[tid] = temp;
     __syncthreads();
@@ -69,11 +76,17 @@ __global__ void dot_kernel_atomic_float(float* x, float* y, float* result, int N
         }
         __syncthreads();
     }
-    for (; s > 0; s >>= 1) {
-        if (tid < s) {
-            sdata[tid] += sdata[tid + s];
-        }
-    }
+    // for (; s > 0; s >>= 1) {
+    //     if (tid < s) {
+    //         sdata[tid] += sdata[tid + s];
+    //     }
+    // }
+    if( tid < 32 ) sdata[tid] += sdata[tid + 32];
+    if( tid < 16 ) sdata[tid] += sdata[tid + 16];
+    if( tid < 8 ) sdata[tid] += sdata[tid + 8];
+    if( tid < 4 ) sdata[tid] += sdata[tid + 4];
+    if( tid < 2 ) sdata[tid] += sdata[tid + 2];
+    if( tid < 1 ) sdata[tid] += sdata[tid + 1];
 
     if (!tid) {
         atomicAdd(result, sdata[0]);
@@ -107,7 +120,7 @@ void dot_product(double* x, double* y, double* result, int N, cudaStream_t strea
 
 void dot_product(float* x, float* y, float* result, int N, cudaStream_t stream)
 {
-    int blockSize = 64;
+    int blockSize = (N > 128) ? 128 : (N > 64) ? 64 : (N > 32) ? 32 : (N > 16) ? 16 : (N > 8) ? 8 : (N > 4) ? 4 : (N > 2) ? 2 : 1;
     size_t sharedMemSize = blockSize * sizeof(float);
 
     int deviceId;
@@ -122,6 +135,7 @@ void dot_product(float* x, float* y, float* result, int N, cudaStream_t stream)
     int waveSize = prop.multiProcessorCount * maxBlocksPerSM;
     int maxBlocks = waveSize * 2;
     int numBlocks = (N / 4 + blockSize - 1) / blockSize;
+    // int numBlocks = (N + blockSize - 1) / blockSize;
     if (numBlocks > maxBlocks) {
         numBlocks = maxBlocks;
     }
